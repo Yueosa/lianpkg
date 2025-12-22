@@ -2,7 +2,14 @@ use std::fs;
 use std::path::{Path};
 use crate::log;
 
-pub fn extract_wallpapers(search_path: &Path, base_output: &Path, video_output_opt: Option<&Path>) {
+pub struct WallpaperStats {
+    pub mp4_count: usize,
+    pub pkg_count: usize,
+}
+
+pub fn extract_wallpapers(search_path: &Path, base_output: &Path, video_output_opt: Option<&Path>) -> WallpaperStats {
+    let mut stats = WallpaperStats { mp4_count: 0, pkg_count: 0 };
+    
     let mp4_output = if let Some(v) = video_output_opt {
         v.to_path_buf()
     } else {
@@ -12,24 +19,21 @@ pub fn extract_wallpapers(search_path: &Path, base_output: &Path, video_output_o
 
     if let Err(e) = fs::create_dir_all(&mp4_output) {
         log::error(&format!("Failed to create video output dir: {}", e));
-        return;
+        return stats;
     }
     if let Err(e) = fs::create_dir_all(&pkg_output) {
         log::error(&format!("Failed to create pkg output dir: {}", e));
-        return;
+        return stats;
     }
 
-    log::title("--- 开始扫描目录 ---");
-    log::info(&format!("Search Path: {:?}", search_path));
-    log::info(&format!("Video Output: {:?}", mp4_output));
-    log::info(&format!("PKG Output: {:?}", pkg_output));
-    log::info("------------------------------------------");
+    log::title("Starting Wallpaper Extraction");
+    log::debug("extract_wallpapers", &format!("Search: {:?}, Output: {:?}", search_path, base_output), "Init");
 
     let entries = match fs::read_dir(search_path) {
         Ok(e) => e,
         Err(e) => {
             log::error(&format!("Failed to read search path: {}", e));
-            return;
+            return stats;
         }
     };
 
@@ -47,9 +51,6 @@ pub fn extract_wallpapers(search_path: &Path, base_output: &Path, video_output_o
             Some(n) => n,
             None => continue,
         };
-
-        let mut found_mp4 = false;
-        let mut found_pkg = false;
 
         // Read dir content
         let sub_entries = match fs::read_dir(&path) {
@@ -75,34 +76,42 @@ pub fn extract_wallpapers(search_path: &Path, base_output: &Path, video_output_o
             }
         }
 
-        if !mp4_files.is_empty() {
-            found_mp4 = true;
-            log::info(&format!("✅ [找到视频] 在目录: {}", dir_name));
+        let has_mp4 = !mp4_files.is_empty();
+        let has_pkg = !pkg_files.is_empty();
+
+        if has_mp4 {
+            log::info(&format!("Found Video in: {}", dir_name));
             for file in mp4_files {
                 let dest = mp4_output.join(file.file_name().unwrap());
+                log::debug("extract_wallpapers", &format!("Copying {:?}", file), "Processing MP4");
                 if let Err(e) = fs::copy(&file, &dest) {
                     log::error(&format!("Failed to copy mp4: {}", e));
+                } else {
+                    stats.mp4_count += 1;
                 }
             }
         }
 
-        if !pkg_files.is_empty() {
-            found_pkg = true;
-            log::info(&format!("📦 [找到 PKG] 在目录: {}", dir_name));
+        if has_pkg {
+            log::info(&format!("Found PKG in: {}", dir_name));
             for file in pkg_files {
                 let file_name = file.file_name().unwrap().to_str().unwrap();
                 let new_name = format!("{}_{}", dir_name, file_name);
                 let dest = pkg_output.join(new_name);
+                log::debug("extract_wallpapers", &format!("Copying {:?}", file), "Processing PKG");
                 if let Err(e) = fs::copy(&file, &dest) {
                     log::error(&format!("Failed to copy pkg: {}", e));
+                } else {
+                    stats.pkg_count += 1;
                 }
             }
         }
 
-        if !found_mp4 && !found_pkg {
-            log::info(&format!("❌ [目录无有效素材]: {}", dir_name));
+        if !has_mp4 && !has_pkg {
+            log::debug("extract_wallpapers", dir_name, "No valid assets found");
         }
     }
-    log::info("------------------------------------------");
-    log::info("扫描完成！");
+    
+    log::success("Wallpaper extraction completed");
+    stats
 }
