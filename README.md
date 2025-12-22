@@ -2,6 +2,8 @@
 
 LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它可以提取壁纸文件、解包 `.pkg` 文件以及将 `.tex` 纹理转换为常见的图像格式。
 
+---
+
 ## 安装
 
 你可以直接在 Releases 页面下载编译好的二进制文件使用。
@@ -14,6 +16,8 @@ cargo build --release
 
 编译后的二进制文件位于 `target/release/lianpkg`。
 
+---
+
 ## 配置
 
 首次运行时，LianPkg 会在以下位置生成默认配置文件：
@@ -24,6 +28,8 @@ cargo build --release
 2. `config.toml`
 3. `default.toml`
 4. **硬编码默认值**
+
+---
 
 ## 使用说明
 
@@ -85,10 +91,14 @@ lianpkg auto
 - **参数**: 目前 `auto` 模式不接受任何路径参数
 - 它完全依赖配置文件 (`config.toml` 或 `default.toml`) 中的路径设置来串联整个流程
 
+---
+
 ## 常用选项
 
 - `-h, --help`: 显示帮助信息
 - `-d, --debug`: 启用调试日志输出
+
+---
 
 ## 免责声明 (Disclaimer)
 
@@ -98,3 +108,20 @@ lianpkg auto
 2.  **使用责任**: 用户在使用本工具时应遵守相关法律法规。对于用户使用本工具所产生的任何后果（包括但不限于版权纠纷、数据丢失等），开发者不承担任何责任。
 3.  **非官方工具**: 本项目与 Wallpaper Engine 或 Valve (Steam) 没有任何官方关联。
 
+---
+
+## 致谢与参考资料
+
+本项目灵感来源于对现有工具的研究，这些工具用于处理 Wallpaper Engine 的资源格式。
+
+- **RePKG**，作者 notscuffed（MIT 许可证）
+
+用作理解 `.pkg` 文件结构的参考。
+
+- **we**，作者 redpfire（GPL-3.0 许可证）
+
+用于文件格式分析和解包逻辑。
+
+本项目未复制任何源代码；LianPkg 是一个完全独立于源代码的 Rust 重写版本。
+
+本项目与 Wallpaper Engine、Valve 或上述工具的作者均无任何关联。
