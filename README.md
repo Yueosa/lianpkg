@@ -4,6 +4,18 @@ LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它
 
 ---
 
+## 使用前须知（重要）
+
+由于 LianPkg 的工作对象是 Steam Workshop 中的 Wallpaper Engine 壁纸资源，它默认处理的目录为：
+
+```swift
+~/.local/share/Steam/steamapps/workshop/content/431960
+```
+
+因此，在使用本工具之前，请确保你的机器上 已经安装并至少运行过一次来自 Linux Steam 官方的 Wallpaper Engine，并且已经通过 Steam 下载过壁纸内容。
+
+如果本地不存在上述目录或目录为空，LianPkg 将无法找到任何可处理的壁纸资源 🐾
+
 ## 安装
 
 你可以直接在 Releases 页面下载编译好的二进制文件使用。
