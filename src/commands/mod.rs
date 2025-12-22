@@ -4,39 +4,24 @@ use crate::config::{self, Config};
 use crate::{log, path, tex, unpacker, wallpaper};
 
 pub fn print_help() {
-    println!("==========================================");
-    println!("                  LianPkg                 ");
-    println!("==========================================");
-    println!("Usage: lianpkg [MODE] [OPTIONS]");
+    println!("lianpkg — Steam wallpaper extract & convert tool");
+    println!();
+    println!("Usage:");
+    println!("  lianpkg <mode> [args]");
     println!();
     println!("Modes:");
-    println!("  wallpaper [SEARCH_PATH] [OUTPUT_PATH]");
-    println!("      Extract wallpapers from Steam Workshop.");
-    println!("      SEARCH_PATH: Path to search for wallpapers (Optional, overrides config)");
-    println!("      OUTPUT_PATH: Path to output extracted files (Optional, overrides config)");
-    println!();
-    println!("  pkg [INPUT_PATH] [OUTPUT_PATH]");
-    println!("      Unpack .pkg files.");
-    println!("      INPUT_PATH: Directory containing .pkg files (Optional, defaults to wallpaper output/Pkg)");
-    println!("      OUTPUT_PATH: Directory to output unpacked files (Optional, overrides config)");
-    println!();
-    println!("  tex [INPUT_PATH]");
-    println!("      Convert .tex files to images.");
-    println!("      INPUT_PATH: Directory containing unpacked files (Optional, defaults to pkg output)");
-    println!();
-    println!("  auto");
-    println!("      Run all steps in sequence: wallpaper -> pkg -> tex.");
-    println!("      Uses configuration values for paths.");
+    println!("  wallpaper    Extract wallpapers");
+    println!("  pkg          Unpack .pkg files");
+    println!("  tex          Convert .tex to images");
+    println!("  auto         Run all steps");
     println!();
     println!("Options:");
-    println!("  -h, --help  Print this help message");
-    println!("  -d, --debug Enable debug logging");
+    println!("  -h, --help   Show this help");
+    println!("  -d, --debug  Enable debug log");
     println!();
-    println!("Configuration:");
-    println!("  Config file is located at ~/.config/lianpkg/config.toml");
-    println!("  (or default.toml if config.toml does not exist)");
-    println!("  Note: If both exist, the program will exit with an error.");
+    println!("Please read the README for full documentation ❤");
 }
+
 
 pub fn run_wallpaper(config: &Config, args: &[String]) -> wallpaper::WallpaperStats {
     let search_path = if args.len() > 0 && !args[0].starts_with("-") {
