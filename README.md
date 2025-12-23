@@ -30,6 +30,17 @@ cargo build --release
 
 编译后的二进制文件位于 `target/release/lianpkg`。
 
+#### ArchLinux
+
+可以通过AUR安装 [lianpkg-bin](https://aur.archlinux.org/packages/lianpkg-bin)
+
+```shell
+yay -S lianpkg-bin
+
+#或使用paru
+paru -S lianpkg-bin
+```
+
 ---
 
 ## 配置
