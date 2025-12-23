@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::Path;
-use crate::log;
+use crate::{log, path};
 
 pub struct WallpaperStats {
     pub raw_count: usize,
@@ -45,20 +45,18 @@ pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output
             None => continue,
         };
 
-        // Check for .pkg files
         let has_pkg = check_has_pkg(&path);
 
         if has_pkg {
             log::info(&format!("Found PKG in: {}", dir_name));
             
-            // 1. Copy .pkg files to pkg_temp_output (Flattened)
             if let Ok(sub_entries) = fs::read_dir(&path) {
                 for sub_entry in sub_entries.flatten() {
                     let sub_path = sub_entry.path();
                     if let Some(ext) = sub_path.extension().and_then(|s| s.to_str()) {
                         if ext.eq_ignore_ascii_case("pkg") {
                             let file_name = sub_path.file_name().unwrap().to_str().unwrap();
-                            let new_name = format!("{}_{}", dir_name, file_name);
+                            let new_name = path::pkg_temp_dest(dir_name, file_name);
                             let dest = pkg_temp_output.join(new_name);
                             
                             log::debug("extract_wallpapers", &format!("Copying {:?}", sub_path), "Processing PKG");
@@ -71,11 +69,8 @@ pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output
                     }
                 }
             }
-            // Note: We no longer copy the full folder to raw_output if .pkg exists.
-            // The non-pkg resources will be retrieved directly from the source (workshop_path) during the pkg unpack phase.
 
         } else {
-            // No .pkg found, copy entire folder to raw_output
             log::info(&format!("Found Raw Wallpaper: {}", dir_name));
             let dest_dir = raw_output.join(dir_name);
             if dest_dir.exists() {
@@ -131,4 +126,3 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     }
     Ok(())
 }
-

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use crate::path;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -11,44 +12,29 @@ pub struct Config {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WallpaperConfig {
-    // Steam Workshop 壁纸下载路径 (输入)
     pub workshop_path: String,
-    // 不需要解包的壁纸输出路径 (输出 1)
     pub raw_output_path: String,
-    // 需要解包的 .pkg 文件暂存路径 (中间文件)
     pub pkg_temp_path: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UnpackConfig {
-    // 解包后的文件输出路径 (输出 2)
     pub unpacked_output_path: String,
+    pub clean_pkg_temp: bool,
+    pub clean_unpacked: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TexConfig {
-    // .tex 转换后的图片输出路径 (输出 3)
-    // 如果为 None，则默认在 unpacked_output_path 下的子目录
     pub converted_output_path: Option<String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        let workshop_path = get_default_search_path();
-
-        #[cfg(target_os = "windows")]
-        let (raw_output_path, pkg_temp_path, unpacked_output_path) = (
-            r".\Wallpapers_Raw".to_string(),
-            r".\Pkg_Temp".to_string(),
-            r".\Pkg_Unpacked".to_string(),
-        );
-
-        #[cfg(not(target_os = "windows"))]
-        let (raw_output_path, pkg_temp_path, unpacked_output_path) = (
-            "~/.local/share/lianpkg/Wallpapers_Raw".to_string(),
-            "~/.local/share/lianpkg/Pkg_Temp".to_string(),
-            "~/.local/share/lianpkg/Pkg_Unpacked".to_string(),
-        );
+        let workshop_path = path::default_workshop_path();
+        let raw_output_path = path::default_raw_output_path();
+        let pkg_temp_path = path::default_pkg_temp_path();
+        let unpacked_output_path = path::default_unpacked_output_path();
 
         Config {
             wallpaper: WallpaperConfig {
@@ -58,6 +44,8 @@ impl Default for Config {
             },
             unpack: UnpackConfig {
                 unpacked_output_path,
+                clean_pkg_temp: true,
+                clean_unpacked: true,
             },
             tex: TexConfig {
                 converted_output_path: None,
@@ -72,7 +60,19 @@ pub enum ConfigStatus {
     Error(String),
 }
 
-pub fn load_config() -> ConfigStatus {
+pub fn load_config(custom_path: Option<PathBuf>) -> ConfigStatus {
+    if let Some(path) = custom_path {
+        let mut final_config = Config::default();
+        if !path.exists() {
+            return ConfigStatus::Error(format!("Config file not found at {}", path.display()));
+        }
+
+        if let Err(e) = merge_config_file(&path, &mut final_config) {
+            return ConfigStatus::Error(e);
+        }
+        return ConfigStatus::Loaded(final_config);
+    }
+
     let config_dir = if cfg!(target_os = "windows") {
         match std::env::current_exe() {
             Ok(path) => path.parent().unwrap_or(&path).to_path_buf(),
@@ -100,33 +100,48 @@ pub fn load_config() -> ConfigStatus {
     if !default_exists && !user_exists {
         let default_config = Config::default();
         
-        // Add comments to the generated TOML
         let commented_config = format!(r#"# LianPkg Configuration File / LianPkg 配置文件
 
 [wallpaper]
-# Steam Workshop 壁纸下载路径 (输入)
+# Steam Workshop 壁纸下载路径
+# 本程序将会从这个路径下扫描 wallpaper 壁纸
 # Windows 默认: C:\Program Files (x86)\Steam\steamapps\workshop\content\431960
 # Linux 默认: ~/.local/share/Steam/steamapps/workshop/content/431960
+
 workshop_path = "{}"
 
-# 不需要解包的壁纸输出路径 (输出 1)
+# 不需要解包的壁纸输出路径
+# 有些 wallpaper 壁纸不需要解包, 就会放到这个路径下
 # Windows 默认: .\Wallpapers_Raw
 # Linux 默认: ~/.local/share/lianpkg/Wallpapers_Raw
+
 raw_output_path = "{}"
 
-# 需要解包的 .pkg 文件暂存路径 (中间文件)
+# 需要解包的 .pkg 文件暂存路径
+# 为了不影响 wallpaper 结构, 本程序将会复制一份 .pkg 到这个临时文件夹
+# 解包完成后就会清空, 如果你需要保留 .pkg 源文件可以在下面配置 clean_pkg_temp = false
 # Windows 默认: .\Pkg_Temp
 # Linux 默认: ~/.local/share/lianpkg/Pkg_Temp
+
 pkg_temp_path = "{}"
 
 [unpack]
-# 解包后的文件输出路径 (输出 2)
+# 解包后的文件输出路径
+# 这是 .pkg 文件第一次解包后的产物路径(不是最终产物), 如果需要你需要保留可以在下面配置 clean_unpacked = false
 # Windows 默认: .\Pkg_Unpacked
 # Linux 默认: ~/.local/share/lianpkg/Pkg_Unpacked
+
 unpacked_output_path = "{}"
+
+# 是否在结束时清理 Pkg_Temp 目录
+clean_pkg_temp = true
+
+# 是否在结束时清理 Pkg_Unpacked 中除 tex_converted 以外的内容
+clean_unpacked = true
 
 [tex]
 # .tex 转换后的图片输出路径 (输出 3)
+# 这是最终产物的目录, 可以不配置, 也可以配置到指定路径
 # 如果留空，则默认在解包路径下的 tex_converted 子目录中
 # converted_output_path = "..."
 "#, 
@@ -145,41 +160,14 @@ unpacked_output_path = "{}"
     let mut final_config = Config::default();
 
     if default_exists {
-        match fs::read_to_string(&default_path) {
-            Ok(content) => {
-                match toml::from_str::<Config>(&content) {
-                    Ok(c) => final_config = c,
-                    Err(e) => eprintln!("[WARN] Failed to parse default.toml: {}", e),
-                }
-            }
-            Err(e) => eprintln!("[WARN] Failed to read default.toml: {}", e),
+        if let Err(e) = merge_config_file(&default_path, &mut final_config) {
+            eprintln!("[WARN] {}", e);
         }
     }
 
     if user_exists {
-        match fs::read_to_string(&user_path) {
-            Ok(content) => {
-                match toml::from_str::<toml::Value>(&content) {
-                    Ok(user_val) => {
-                        let mut config_val = match toml::to_string(&final_config) {
-                            Ok(s) => match toml::from_str::<toml::Value>(&s) {
-                                Ok(v) => v,
-                                Err(e) => return ConfigStatus::Error(format!("Internal error parsing config: {}", e)),
-                            },
-                            Err(e) => return ConfigStatus::Error(format!("Internal error serializing config: {}", e)),
-                        };
-
-                        merge_toml_values(&mut config_val, user_val);
-
-                        match config_val.try_into::<Config>() {
-                            Ok(c) => final_config = c,
-                            Err(e) => return ConfigStatus::Error(format!("Failed to merge config.toml: {}", e)),
-                        }
-                    }
-                    Err(e) => return ConfigStatus::Error(format!("Failed to parse config.toml: {}", e)),
-                }
-            }
-            Err(e) => return ConfigStatus::Error(format!("Failed to read config.toml: {}", e)),
+        if let Err(e) = merge_config_file(&user_path, &mut final_config) {
+            return ConfigStatus::Error(e);
         }
     }
 
@@ -203,46 +191,24 @@ fn merge_toml_values(base: &mut toml::Value, override_val: toml::Value) {
     }
 }
 
-pub fn expand_path(path_str: &str) -> PathBuf {
+fn merge_config_file(path: &Path, final_config: &mut Config) -> Result<(), String> {
+    let content = fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
 
-    if path_str.starts_with("~") {
-        if let Some(home) = dirs::home_dir() {
-            if path_str == "~" {
-                return home;
-            }
-            if path_str.starts_with("~/") {
-                return home.join(&path_str[2..]);
-            }
-        }
-    }
-    PathBuf::from(path_str)
+    let user_val = toml::from_str::<toml::Value>(&content)
+        .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))?;
+
+    let mut config_val = toml::to_string(final_config)
+        .map_err(|e| format!("Internal error serializing config: {}", e))
+        .and_then(|s| toml::from_str::<toml::Value>(&s)
+            .map_err(|e| format!("Internal error parsing config: {}", e)))?;
+
+    merge_toml_values(&mut config_val, user_val);
+
+    *final_config = config_val
+        .try_into::<Config>()
+        .map_err(|e| format!("Failed to merge {}: {}", path.display(), e))?;
+
+    Ok(())
 }
 
-#[cfg(target_os = "windows")]
-fn get_default_search_path() -> String {
-    use winreg::enums::*;
-    use winreg::RegKey;
-
-    // Try to find Steam path from Registry
-    // 尝试从注册表查找 Steam 路径
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    if let Ok(steam) = hkcu.open_subkey("Software\\Valve\\Steam") {
-        if let Ok(path) = steam.get_value::<String, _>("SteamPath") {
-            let path = PathBuf::from(path);
-            return path.join("steamapps")
-                        .join("workshop")
-                        .join("content")
-                        .join("431960")
-                        .to_string_lossy()
-                        .to_string();
-        }
-    }
-    
-    // Fallback default
-    r"C:\Program Files (x86)\Steam\steamapps\workshop\content\431960".to_string()
-}
-
-#[cfg(not(target_os = "windows"))]
-fn get_default_search_path() -> String {
-    "~/.local/share/Steam/steamapps/workshop/content/431960".to_string()
-}

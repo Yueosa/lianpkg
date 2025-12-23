@@ -1,56 +1,19 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::config::{self, Config};
+use crate::config::Config;
 use crate::{log, path, tex, unpacker, wallpaper};
 
-pub fn print_help() {
-    println!("lianpkg — Steam wallpaper extract & convert tool");
-    println!();
-    println!("Usage:");
-    println!("  lianpkg <mode> [args]");
-    println!();
-    println!("Modes:");
-    println!("  wallpaper    Extract wallpapers");
-    println!("  pkg          Unpack .pkg files");
-    println!("  tex          Convert .tex to images");
-    println!("  auto         Run all steps");
-    println!();
-    println!("Options:");
-    println!("  -h, --help   Show this help");
-    println!("  -d, --debug  Enable debug log");
-    println!();
-    println!("Please read the README for full documentation ❤");
-}
-
-
-pub fn run_wallpaper(config: &Config, args: &[String]) -> wallpaper::WallpaperStats {
-    let search_path = if args.len() > 0 && !args[0].starts_with("-") {
-        config::expand_path(&args[0])
-    } else {
-        config::expand_path(&config.wallpaper.workshop_path)
-    };
-
-    let raw_output_path = config::expand_path(&config.wallpaper.raw_output_path);
-    let pkg_temp_path = config::expand_path(&config.wallpaper.pkg_temp_path);
+pub fn run_wallpaper(config: &Config) -> wallpaper::WallpaperStats {
+    let search_path = path::expand_path(&config.wallpaper.workshop_path);
+    let raw_output_path = path::expand_path(&config.wallpaper.raw_output_path);
+    let pkg_temp_path = path::expand_path(&config.wallpaper.pkg_temp_path);
 
     wallpaper::extract_wallpapers(&search_path, &raw_output_path, &pkg_temp_path)
 }
 
-pub fn run_pkg(config: &Config, args: &[String]) -> usize {
-    let default_input = config::expand_path(&config.wallpaper.pkg_temp_path);
-    let default_output = config::expand_path(&config.unpack.unpacked_output_path);
-
-    let input_path = if args.len() > 0 && !args[0].starts_with("-") {
-        config::expand_path(&args[0])
-    } else {
-        default_input
-    };
-
-    let output_path = if args.len() > 1 && !args[1].starts_with("-") {
-        config::expand_path(&args[1])
-    } else {
-        default_output
-    };
+pub fn run_pkg(config: &Config) -> usize {
+    let input_path = path::expand_path(&config.wallpaper.pkg_temp_path);
+    let output_path = path::expand_path(&config.unpack.unpacked_output_path);
 
     log::title("🚀 Starting PKG Unpack");
     log::info(&format!("Input: {:?}", input_path));
@@ -80,34 +43,23 @@ pub fn run_pkg(config: &Config, args: &[String]) -> usize {
         }
         unpacker::unpack_pkg(&file, &pkg_output_dir);
 
-        // After unpacking, copy non-pkg resources from workshop_path if available
-        // We need to find the corresponding raw folder in workshop_path.
-        // The file_stem usually looks like "123456_scene" or just "scene" if we flattened it.
-        // But in wallpaper::extract_wallpapers we named it "{dir_name}_{file_name}".
-        // So we can try to split by first underscore to get the ID/DirName.
-        
-        // Heuristic: Try to find a folder in workshop_path that matches the prefix of the pkg file
-        let workshop_path = config::expand_path(&config.wallpaper.workshop_path);
+        let workshop_path = path::expand_path(&config.wallpaper.workshop_path);
         if workshop_path.exists() {
-             if let Some((dir_name, _)) = file_stem.split_once('_') {
-                 let raw_source = workshop_path.join(dir_name);
-                 if raw_source.exists() && raw_source.is_dir() {
-                     // Target directory for resources: pkg_output_dir/tex_converted/
-                     // If tex.converted_output_path is set, we should respect it, but here we are in 'pkg' mode,
-                     // and usually resources go with the converted textures.
-                     // However, since 'tex' mode runs AFTER 'pkg' mode, we can just put them in a 'tex_converted' folder inside the unpacked dir for now,
-                     // or wherever the user expects them.
-                     // The user requested: "Pkg_Unpacked/xxx_scene/tex_converted/"
-                     // But if converted_output_path is set, we should use that instead.
-                     
-                     let resource_dest = path::resolve_tex_output_dir(config, &pkg_output_dir, None, None);
-                     
-                     log::info(&format!("Copying additional resources from {:?} to {:?}", raw_source, resource_dest));
-                     if let Err(e) = copy_non_pkg_files(&raw_source, &resource_dest) {
-                         log::error(&format!("Failed to copy resources: {}", e));
-                     }
-                 }
-             }
+            let scene_name = path::scene_name_from_pkg_stem(file_stem);
+            let raw_source = workshop_path.join(&scene_name);
+            if raw_source.exists() && raw_source.is_dir() {
+                let resource_dest = path::resolve_tex_output_dir(
+                    config.tex.converted_output_path.as_deref(),
+                    &pkg_output_dir,
+                    None,
+                    None,
+                );
+                
+                log::info(&format!("Copying additional resources from {:?} to {:?}", raw_source, resource_dest));
+                if let Err(e) = copy_non_pkg_files(&raw_source, &resource_dest) {
+                    log::error(&format!("Failed to copy resources: {}", e));
+                }
+            }
         }
 
         count += 1;
@@ -136,14 +88,8 @@ fn copy_non_pkg_files(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn run_tex(config: &Config, args: &[String]) -> usize {
-    let default_input = config::expand_path(&config.unpack.unpacked_output_path);
-    
-    let input_path = if args.len() > 0 && !args[0].starts_with("-") {
-        config::expand_path(&args[0])
-    } else {
-        default_input
-    };
+pub fn run_tex(config: &Config) -> usize {
+    let input_path = path::expand_path(&config.unpack.unpacked_output_path);
 
     log::title("🚀 Starting TEX Conversion");
     log::info(&format!("Input: {:?}", input_path));
@@ -165,13 +111,16 @@ pub fn run_tex(config: &Config, args: &[String]) -> usize {
     for file in tex_files {
         let file_stem = file.file_stem().unwrap().to_str().unwrap();
         let project_root = path::find_project_root(&file);
-        
-        // Determine output directory using centralized logic
-        // We use input_path as the relative base if project_root is not found, or project_root if found.
-        let relative_base = project_root.as_deref().unwrap_or(&input_path);
-        let root_for_default = project_root.as_deref().unwrap_or(file.parent().unwrap());
 
-        let final_output_dir = path::resolve_tex_output_dir(config, root_for_default, Some(&file), Some(relative_base));
+        let scene_root = project_root.as_deref().unwrap_or_else(|| file.parent().unwrap());
+        let relative_base = project_root.as_deref().unwrap_or(&input_path);
+
+        let final_output_dir = path::resolve_tex_output_dir(
+            config.tex.converted_output_path.as_deref(),
+            scene_root,
+            Some(&file),
+            Some(relative_base),
+        );
 
         if let Err(e) = fs::create_dir_all(&final_output_dir) {
             log::error(&format!("Failed to create output dir: {}", e));
@@ -186,9 +135,23 @@ pub fn run_tex(config: &Config, args: &[String]) -> usize {
 
 pub fn run_auto(config: &Config) {
     log::title("🤖 Starting Auto Mode");
-    let wp_stats = run_wallpaper(config, &[]);
-    let pkg_count = run_pkg(config, &[]);
-    let tex_count = run_tex(config, &[]);
+    let wp_stats = run_wallpaper(config);
+    let pkg_count = run_pkg(config);
+    let tex_count = run_tex(config);
+
+    if config.unpack.clean_pkg_temp {
+        log::info("Cleaning Pkg_Temp...");
+        if let Err(e) = cleanup_pkg_temp(&path::expand_path(&config.wallpaper.pkg_temp_path)) {
+            log::error(&format!("Cleanup Pkg_Temp failed: {}", e));
+        }
+    }
+
+    if config.unpack.clean_unpacked {
+        log::info("Cleaning Pkg_Unpacked (keeping tex_converted)...");
+        if let Err(e) = cleanup_unpacked(&path::expand_path(&config.unpack.unpacked_output_path)) {
+            log::error(&format!("Cleanup Pkg_Unpacked failed: {}", e));
+        }
+    }
     
     log::title("✨ Auto Mode Completed ✨");
     println!("==========================================");
@@ -202,6 +165,48 @@ pub fn run_auto(config: &Config) {
     println!("TEX Conversion:");
     println!("  - TEXs Converted:   {}", tex_count);
     println!("==========================================");
+}
+
+fn cleanup_pkg_temp(dir: &Path) -> std::io::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    fs::remove_dir_all(dir)
+}
+
+fn cleanup_unpacked(dir: &Path) -> std::io::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let scene_dir = entry.path();
+        if !scene_dir.is_dir() {
+            fs::remove_file(scene_dir)?;
+            continue;
+        }
+
+        let tex_dir = scene_dir.join("tex_converted");
+        if tex_dir.exists() {
+            for child in fs::read_dir(&scene_dir)? {
+                let child = child?;
+                let child_path = child.path();
+                if child_path == tex_dir {
+                    continue;
+                }
+                if child_path.is_dir() {
+                    fs::remove_dir_all(child_path)?;
+                } else {
+                    fs::remove_file(child_path)?;
+                }
+            }
+        } else {
+            fs::remove_dir_all(scene_dir)?;
+        }
+    }
+
+    Ok(())
 }
 
 

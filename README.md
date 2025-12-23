@@ -1,12 +1,12 @@
-# LianPkg
+# LianPkg ✨
 
-LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它可以提取壁纸文件、解包 `.pkg` 文件以及将 `.tex` 纹理转换为常见的图像格式。
+LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它可以提取壁纸文件、解包 `.pkg` 文件以及将 `.tex` 纹理转换为常见的图像格式，支持 Linux 与 Windows。
 
 ---
 
-## 使用前须知（重要）
+## 使用前须知（重要）⚠️
 
-由于 LianPkg 的工作对象是 Steam Workshop 中的 Wallpaper Engine 壁纸资源，它默认处理的目录为：
+由于 LianPkg 的工作对象是 Steam Workshop 中的 Wallpaper Engine 壁纸资源，默认处理目录为：
 
 ```swift
 ~/.local/share/Steam/steamapps/workshop/content/431960
@@ -18,9 +18,9 @@ LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它
 
 > 其实你也可以自行下载 `.pkg` 文件，并修改程序的处理路径，但本程序推荐您在官方 Wallpaper Engine 获取安全的壁纸文件
 
-## 安装
+## 安装 📦
 
-你可以直接在 Releases 页面下载编译好的二进制文件使用。
+你可以直接在 Releases 页面下载编译好的二进制文件使用（提供 Linux 与 Windows 版本）。
 
 或者，如果你想自己编译，请确保你已经安装了 Rust 和 Cargo：
 
@@ -43,10 +43,11 @@ paru -S lianpkg-bin
 
 ---
 
-## 配置
+## 配置 🛠️
 
-首次运行时，LianPkg 会在以下位置生成默认配置文件：
-`~/.config/lianpkg/default.toml`
+首次运行时，LianPkg 会生成默认配置文件：
+- Linux: `~/.config/lianpkg/default.toml`
+- Windows: 与 exe 同目录（便携化；可用 `--config` 指定其他路径）
 
 你可以在同一目录下创建 `config.toml` 来覆盖特定设置。程序的配置优先级如下：
 1. **命令行参数**
@@ -56,86 +57,103 @@ paru -S lianpkg-bin
 
 ---
 
-## 使用说明
+## 使用说明（全新 CLI）🚀
 
 ```bash
-lianpkg [模式] [选项]
+lianpkg <模式> [全局选项] [子命令选项]
 ```
 
-### 1. `wallpaper` 模式
+### 全局选项 🌍
 
-> 用于从 Wallpaper Engine 目录提取壁纸
+- `--config <FILE>`：指定配置文件路径（不写则使用默认路径，首次运行会自动生成配置）
+- `-d, --debug`：启用调试日志
+- `-h, --help`：查看帮助
+
+### 模式与参数 🧭
+
+所有子命令同时支持位置参数（兼容旧用法）和长参数（更易读）。
+
+1) `wallpaper` — 提取壁纸 🖼️
 
 ```bash
-lianpkg wallpaper [搜索路径] [输出路径]
+lianpkg wallpaper [SEARCH] [RAW_OUT] [PKG_TEMP]
+  --search <PATH> --raw-out <PATH> --pkg-temp <PATH>
 ```
 
-- **参数 1 (可选): 搜索路径 (Search Path)**
-    - 如果提供，将覆盖配置文件中的 `wallpaper.search_path`
-    - 如果不提供，使用配置文件中的值
-- **参数 2 (可选): 输出路径 (Output Path)**
-    - 如果提供，将覆盖配置文件中的 `wallpaper.output_path`
-    - 如果不提供，使用配置文件中的值
+- `SEARCH`/`--search`：壁纸源目录（对应 `wallpaper.workshop_path`），默认指向 Steam Workshop 目录。
+- `RAW_OUT`/`--raw-out`：无需解包的壁纸输出目录（`wallpaper.raw_output_path`）。
+- `PKG_TEMP`/`--pkg-temp`：临时存放 `.pkg` 的目录（`wallpaper.pkg_temp_path`），解包结束可按清理开关删除。
 
-### 2. `pkg` 模式
-
-> 用于解包 `.pkg` 文件
+2) `pkg` — 解包 `.pkg` 📦
 
 ```bash
-lianpkg pkg [输入路径] [输出路径]
+lianpkg pkg [INPUT] [OUTPUT]
+  --input <PATH> --output <PATH>
 ```
 
-- **参数 1 (可选): 输入路径 (Input Path)**
-    - 如果提供，将作为查找 `.pkg` 文件的目录
-    - 如果不提供，默认使用 `wallpaper` 模式输出路径下的 `Pkg` 文件夹 (即 `config.wallpaper.output_path/Pkg`)
-- **参数 2 (可选): 输出路径 (Output Path)**
-    - 如果提供，将覆盖配置文件中的 `pkg.output_path`
-    - 如果不提供，使用配置文件中的值
+- `INPUT`/`--input`：读取 `.pkg` 的目录，默认使用 `wallpaper.pkg_temp_path`。
+- `OUTPUT`/`--output`：首次解包产物目录（`unpack.unpacked_output_path`）。
 
-### 3. `tex` 模式
-
-> 用于将 `.tex` 文件转换为图片
+3) `tex` — 转换 `.tex` 🧩
 
 ```bash
-lianpkg tex [输入路径]
+lianpkg tex [INPUT]
+  --input <PATH> --output <PATH>
 ```
 
-- **参数 1 (可选): 输入路径 (Input Path)**
-    - 如果提供，将作为查找 `.tex` 文件的目录
-    - 如果不提供，默认使用 `pkg` 模式的输出路径 (即 `config.pkg.output_path`)
-- **输出路径**: 此模式不支持通过命令行指定输出路径。它会自动在 `.tex` 文件所在的项目根目录下创建 `tex_converted` 文件夹
+`--output` 会覆盖 `tex.converted_output_path`，不写则使用默认的 `tex_converted` 结构。
 
-### 4. `auto` 模式
+- `INPUT`/`--input`：查找 `.tex` 的目录，默认使用 `unpack.unpacked_output_path`。
+- `--output`：最终图片输出目录；留空则在每个场景下创建 `tex_converted`，保持原有层级。
 
-> 一键执行 `wallpaper` -> `pkg` -> `tex` 流程
+4) `auto` — 一键执行 wallpaper -> pkg -> tex 🤖
 
 ```bash
-lianpkg auto
+lianpkg auto \
+  [--search <PATH>] [--raw-out <PATH>] [--pkg-temp <PATH>] \
+  [--input <PATH>] [--unpacked-out <PATH>] [--tex-out <PATH>] \
+  [--no-clean-temp] [--no-clean-unpacked] [--dry-run]
 ```
 
-- **参数**: 目前 `auto` 模式不接受任何路径参数
-- 它完全依赖配置文件 (`config.toml` 或 `default.toml`) 中的路径设置来串联整个流程
+- `--no-clean-temp`：结束时保留 `Pkg_Temp`
+- `--no-clean-unpacked`：保留 `Pkg_Unpacked`（仍保留 `tex_converted`）
+- `--dry-run`：仅打印解析后的路径与清理计划，不执行任何操作
+
+- `--search`/`--raw-out`/`--pkg-temp`：覆盖 wallpaper 阶段路径。
+- `--input`/`--unpacked-out`：覆盖 pkg 解包输入/输出路径。
+- `--tex-out`：覆盖 tex 最终输出目录；默认使用 `tex_converted` 结构。
+- `--no-clean-temp` 对应 `unpack.clean_pkg_temp`；`--no-clean-unpacked` 对应 `unpack.clean_unpacked`。
+
+### 平台差异与运行方式 🖥️
+
+- Linux：默认路径基于 `~/.local/share`，命令行运行 `lianpkg ...`。
+- Windows：默认路径基于 exe 同目录（便携化）；可双击运行，流程结束会提示按 Enter 退出；也可在 cmd/PowerShell 运行 `lianpkg.exe ...`。
+
+### 重要提示 📌
+
+- 默认路径可通过 CLI 覆盖或修改 `config.toml`。
+- 清理开关默认开启（保留 `tex_converted`），可用 `--no-clean-temp` / `--no-clean-unpacked` 关闭。
+
+### 快速上手示例 ⏱️
+
+- 一键执行默认流程：`lianpkg auto`
+- 仅解包自定义路径：`lianpkg pkg /path/to/pkg /tmp/output`
+- 转换 `.tex` 并指定最终输出：`lianpkg tex /tmp/Pkg_Unpacked --output /tmp/tex_converted`
+- 只想看看会做什么：`lianpkg auto --dry-run`
 
 ---
 
-## 常用选项
-
-- `-h, --help`: 显示帮助信息
-- `-d, --debug`: 启用调试日志输出
-
----
-
-## 免责声明 (Disclaimer)
+## 免责声明 (Disclaimer) 📄
 
 本工具仅供学习交流和个人备份使用。
 
-1.  **版权归属**: 本工具提取和解包的所有资源（包括但不限于图片、视频、脚本等）的版权归原作者或 Wallpaper Engine 所有。请勿将提取的资源用于商业用途或违反原作者许可的用途。
-2.  **使用责任**: 用户在使用本工具时应遵守相关法律法规。对于用户使用本工具所产生的任何后果（包括但不限于版权纠纷、数据丢失等），开发者不承担任何责任。
-3.  **非官方工具**: 本项目与 Wallpaper Engine 或 Valve (Steam) 没有任何官方关联。
+1. **版权归属**: 本工具提取和解包的所有资源（包括但不限于图片、视频、脚本等）的版权归原作者或 Wallpaper Engine 所有。请勿将提取的资源用于商业用途或违反原作者许可的用途。
+2. **使用责任**: 用户在使用本工具时应遵守相关法律法规。对于用户使用本工具所产生的任何后果（包括但不限于版权纠纷、数据丢失等），开发者不承担任何责任。
+3. **非官方工具**: 本项目与 Wallpaper Engine 或 Valve (Steam) 没有任何官方关联。
 
 ---
 
-## 致谢与参考资料
+## 致谢与参考资料 🙏
 
 本项目灵感来源于对现有工具的研究，这些工具用于处理 Wallpaper Engine 的资源格式。
 
