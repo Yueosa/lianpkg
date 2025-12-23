@@ -1,33 +1,26 @@
 use std::fs;
-use std::path::{Path};
+use std::path::Path;
 use crate::log;
 
 pub struct WallpaperStats {
-    pub mp4_count: usize,
+    pub raw_count: usize,
     pub pkg_count: usize,
 }
 
-pub fn extract_wallpapers(search_path: &Path, base_output: &Path, video_output_opt: Option<&Path>) -> WallpaperStats {
-    let mut stats = WallpaperStats { mp4_count: 0, pkg_count: 0 };
+pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output: &Path) -> WallpaperStats {
+    let mut stats = WallpaperStats { raw_count: 0, pkg_count: 0 };
     
-    let mp4_output = if let Some(v) = video_output_opt {
-        v.to_path_buf()
-    } else {
-        base_output.to_path_buf()
-    };
-    let pkg_output = base_output.join("Pkg");
-
-    if let Err(e) = fs::create_dir_all(&mp4_output) {
-        log::error(&format!("Failed to create video output dir: {}", e));
+    if let Err(e) = fs::create_dir_all(raw_output) {
+        log::error(&format!("Failed to create raw output dir: {}", e));
         return stats;
     }
-    if let Err(e) = fs::create_dir_all(&pkg_output) {
-        log::error(&format!("Failed to create pkg output dir: {}", e));
+    if let Err(e) = fs::create_dir_all(pkg_temp_output) {
+        log::error(&format!("Failed to create pkg temp dir: {}", e));
         return stats;
     }
 
     log::title("Starting Wallpaper Extraction");
-    log::debug("extract_wallpapers", &format!("Search: {:?}, Output: {:?}", search_path, base_output), "Init");
+    log::debug("extract_wallpapers", &format!("Search: {:?}, Raw: {:?}, Pkg: {:?}", search_path, raw_output, pkg_temp_output), "Init");
 
     let entries = match fs::read_dir(search_path) {
         Ok(e) => e,
@@ -52,66 +45,90 @@ pub fn extract_wallpapers(search_path: &Path, base_output: &Path, video_output_o
             None => continue,
         };
 
-        // Read dir content
-        let sub_entries = match fs::read_dir(&path) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-
-        let mut mp4_files = Vec::new();
-        let mut pkg_files = Vec::new();
-
-        for sub_entry in sub_entries {
-            let sub_entry = match sub_entry {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-            let sub_path = sub_entry.path();
-            let ext = sub_path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
-
-            if ext == "mp4" {
-                mp4_files.push(sub_path);
-            } else if ext == "pkg" {
-                pkg_files.push(sub_path);
-            }
-        }
-
-        let has_mp4 = !mp4_files.is_empty();
-        let has_pkg = !pkg_files.is_empty();
-
-        if has_mp4 {
-            log::info(&format!("Found Video in: {}", dir_name));
-            for file in mp4_files {
-                let dest = mp4_output.join(file.file_name().unwrap());
-                log::debug("extract_wallpapers", &format!("Copying {:?}", file), "Processing MP4");
-                if let Err(e) = fs::copy(&file, &dest) {
-                    log::error(&format!("Failed to copy mp4: {}", e));
-                } else {
-                    stats.mp4_count += 1;
-                }
-            }
-        }
+        // Check for .pkg files
+        let has_pkg = check_has_pkg(&path);
 
         if has_pkg {
             log::info(&format!("Found PKG in: {}", dir_name));
-            for file in pkg_files {
-                let file_name = file.file_name().unwrap().to_str().unwrap();
-                let new_name = format!("{}_{}", dir_name, file_name);
-                let dest = pkg_output.join(new_name);
-                log::debug("extract_wallpapers", &format!("Copying {:?}", file), "Processing PKG");
-                if let Err(e) = fs::copy(&file, &dest) {
-                    log::error(&format!("Failed to copy pkg: {}", e));
-                } else {
-                    stats.pkg_count += 1;
+            
+            // 1. Copy .pkg files to pkg_temp_output (Flattened)
+            if let Ok(sub_entries) = fs::read_dir(&path) {
+                for sub_entry in sub_entries.flatten() {
+                    let sub_path = sub_entry.path();
+                    if let Some(ext) = sub_path.extension().and_then(|s| s.to_str()) {
+                        if ext.eq_ignore_ascii_case("pkg") {
+                            let file_name = sub_path.file_name().unwrap().to_str().unwrap();
+                            let new_name = format!("{}_{}", dir_name, file_name);
+                            let dest = pkg_temp_output.join(new_name);
+                            
+                            log::debug("extract_wallpapers", &format!("Copying {:?}", sub_path), "Processing PKG");
+                            if let Err(e) = fs::copy(&sub_path, &dest) {
+                                log::error(&format!("Failed to copy pkg: {}", e));
+                            } else {
+                                stats.pkg_count += 1;
+                            }
+                        }
+                    }
                 }
+            }
+            // Note: We no longer copy the full folder to raw_output if .pkg exists.
+            // The non-pkg resources will be retrieved directly from the source (workshop_path) during the pkg unpack phase.
+
+        } else {
+            // No .pkg found, copy entire folder to raw_output
+            log::info(&format!("Found Raw Wallpaper: {}", dir_name));
+            let dest_dir = raw_output.join(dir_name);
+            if dest_dir.exists() {
+                log::debug("extract_wallpapers", dir_name, "Skipping existing raw wallpaper");
+                continue;
+            }
+
+            if let Err(e) = copy_dir_recursive(&path, &dest_dir) {
+                log::error(&format!("Failed to copy raw wallpaper {}: {}", dir_name, e));
+            } else {
+                stats.raw_count += 1;
+                log::success(&format!("Copied raw wallpaper: {}", dir_name));
             }
         }
 
-        if !has_mp4 && !has_pkg {
-            log::debug("extract_wallpapers", dir_name, "No valid assets found");
-        }
     }
     
     log::success("Wallpaper extraction completed");
     stats
 }
+
+fn check_has_pkg(path: &Path) -> bool {
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                    if ext.eq_ignore_ascii_case("pkg") {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    if !dst.exists() {
+        fs::create_dir_all(dst)?;
+    }
+
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let dest_path = dst.join(entry.file_name());
+
+        if file_type.is_dir() {
+            copy_dir_recursive(&entry.path(), &dest_path)?;
+        } else {
+            fs::copy(entry.path(), dest_path)?;
+        }
+    }
+    Ok(())
+}
+

@@ -25,7 +25,14 @@ fn main() {
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        commands::print_help();
+        println!("No arguments provided, defaulting to 'auto' mode...");
+        commands::run_auto(&config);
+
+        #[cfg(target_os = "windows")]
+        {
+            println!("\nPress Enter to exit...");
+            let _ = std::io::stdin().read_line(&mut String::new());
+        }
         return;
     }
 

@@ -5,31 +5,62 @@ use std::path::PathBuf;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub wallpaper: WallpaperConfig,
-    pub pkg: PkgConfig,
+    pub unpack: UnpackConfig,
+    pub tex: TexConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WallpaperConfig {
-    pub search_path: String,
-    pub output_path: String,
-    pub video_path: Option<String>,
+    // Steam Workshop 壁纸下载路径 (输入)
+    pub workshop_path: String,
+    // 不需要解包的壁纸输出路径 (输出 1)
+    pub raw_output_path: String,
+    // 需要解包的 .pkg 文件暂存路径 (中间文件)
+    pub pkg_temp_path: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PkgConfig {
-    pub output_path: String,
+pub struct UnpackConfig {
+    // 解包后的文件输出路径 (输出 2)
+    pub unpacked_output_path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TexConfig {
+    // .tex 转换后的图片输出路径 (输出 3)
+    // 如果为 None，则默认在 unpacked_output_path 下的子目录
+    pub converted_output_path: Option<String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
+        let workshop_path = get_default_search_path();
+
+        #[cfg(target_os = "windows")]
+        let (raw_output_path, pkg_temp_path, unpacked_output_path) = (
+            r".\Wallpapers_Raw".to_string(),
+            r".\Pkg_Temp".to_string(),
+            r".\Pkg_Unpacked".to_string(),
+        );
+
+        #[cfg(not(target_os = "windows"))]
+        let (raw_output_path, pkg_temp_path, unpacked_output_path) = (
+            "~/.local/share/lianpkg/Wallpapers_Raw".to_string(),
+            "~/.local/share/lianpkg/Pkg_Temp".to_string(),
+            "~/.local/share/lianpkg/Pkg_Unpacked".to_string(),
+        );
+
         Config {
             wallpaper: WallpaperConfig {
-                search_path: "~/.local/share/Steam/steamapps/workshop/content/431960".to_string(),
-                output_path: "~/.local/share/lianpkg/".to_string(),
-                video_path: None,
+                workshop_path,
+                raw_output_path,
+                pkg_temp_path,
             },
-            pkg: PkgConfig {
-                output_path: "~/.local/share/lianpkg/Pkg_converted".to_string(),
+            unpack: UnpackConfig {
+                unpacked_output_path,
+            },
+            tex: TexConfig {
+                converted_output_path: None,
             },
         }
     }
@@ -42,9 +73,16 @@ pub enum ConfigStatus {
 }
 
 pub fn load_config() -> ConfigStatus {
-    let config_dir = match dirs::config_dir() {
-        Some(d) => d.join("lianpkg"),
-        None => return ConfigStatus::Error("Could not determine config directory".to_string()),
+    let config_dir = if cfg!(target_os = "windows") {
+        match std::env::current_exe() {
+            Ok(path) => path.parent().unwrap_or(&path).to_path_buf(),
+            Err(e) => return ConfigStatus::Error(format!("Failed to get current exe path: {}", e)),
+        }
+    } else {
+        match dirs::config_dir() {
+            Some(d) => d.join("lianpkg"),
+            None => return ConfigStatus::Error("Could not determine config directory".to_string()),
+        }
     };
 
     if !config_dir.exists() {
@@ -60,35 +98,48 @@ pub fn load_config() -> ConfigStatus {
     let user_exists = user_path.exists();
 
     if !default_exists && !user_exists {
-        let default_config_content = r#"# LianPkg Configuration File / LianPkg 配置文件
+        let default_config = Config::default();
+        
+        // Add comments to the generated TOML
+        let commented_config = format!(r#"# LianPkg Configuration File / LianPkg 配置文件
 
 [wallpaper]
-# The path where Wallpaper Engine downloads wallpapers.
-# Wallpaper Engine 壁纸下载路径。
-# Default/默认: ~/.local/share/Steam/steamapps/workshop/content/431960
-search_path = "~/.local/share/Steam/steamapps/workshop/content/431960"
+# Steam Workshop 壁纸下载路径 (输入)
+# Windows 默认: C:\Program Files (x86)\Steam\steamapps\workshop\content\431960
+# Linux 默认: ~/.local/share/Steam/steamapps/workshop/content/431960
+workshop_path = "{}"
 
-# The base output path for extracted wallpapers.
-# 提取壁纸的基础输出路径。
-# Default/默认: ~/.local/share/lianpkg/
-output_path = "~/.local/share/lianpkg/"
+# 不需要解包的壁纸输出路径 (输出 1)
+# Windows 默认: .\Wallpapers_Raw
+# Linux 默认: ~/.local/share/lianpkg/Wallpapers_Raw
+raw_output_path = "{}"
 
-# Optional: Separate path for storing extracted video files (.mp4).
-# 可选：用于存储提取的视频文件 (.mp4) 的单独路径。
-# If not set, videos are stored in output_path.
-# 如果未设置，视频将存储在 output_path 中。
-# video_path = "/path/to/videos"
+# 需要解包的 .pkg 文件暂存路径 (中间文件)
+# Windows 默认: .\Pkg_Temp
+# Linux 默认: ~/.local/share/lianpkg/Pkg_Temp
+pkg_temp_path = "{}"
 
-[pkg]
-# The output path for unpacked PKG files.
-# 解包 PKG 文件的输出路径。
-# Default/默认: ~/.local/share/lianpkg/Pkg_converted
-output_path = "~/.local/share/lianpkg/Pkg_converted"
-"#;
-        if let Err(e) = fs::write(&default_path, default_config_content) {
+[unpack]
+# 解包后的文件输出路径 (输出 2)
+# Windows 默认: .\Pkg_Unpacked
+# Linux 默认: ~/.local/share/lianpkg/Pkg_Unpacked
+unpacked_output_path = "{}"
+
+[tex]
+# .tex 转换后的图片输出路径 (输出 3)
+# 如果留空，则默认在解包路径下的 tex_converted 子目录中
+# converted_output_path = "..."
+"#, 
+            default_config.wallpaper.workshop_path.replace("\\", "\\\\"),
+            default_config.wallpaper.raw_output_path.replace("\\", "\\\\"),
+            default_config.wallpaper.pkg_temp_path.replace("\\", "\\\\"),
+            default_config.unpack.unpacked_output_path.replace("\\", "\\\\")
+        );
+
+        if let Err(e) = fs::write(&user_path, commented_config) {
             return ConfigStatus::Error(format!("Failed to write default config: {}", e));
         }
-        return ConfigStatus::CreatedDefault(default_path);
+        return ConfigStatus::CreatedDefault(user_path);
     }
 
     let mut final_config = Config::default();
@@ -165,4 +216,33 @@ pub fn expand_path(path_str: &str) -> PathBuf {
         }
     }
     PathBuf::from(path_str)
+}
+
+#[cfg(target_os = "windows")]
+fn get_default_search_path() -> String {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    // Try to find Steam path from Registry
+    // 尝试从注册表查找 Steam 路径
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    if let Ok(steam) = hkcu.open_subkey("Software\\Valve\\Steam") {
+        if let Ok(path) = steam.get_value::<String, _>("SteamPath") {
+            let path = PathBuf::from(path);
+            return path.join("steamapps")
+                        .join("workshop")
+                        .join("content")
+                        .join("431960")
+                        .to_string_lossy()
+                        .to_string();
+        }
+    }
+    
+    // Fallback default
+    r"C:\Program Files (x86)\Steam\steamapps\workshop\content\431960".to_string()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_default_search_path() -> String {
+    "~/.local/share/Steam/steamapps/workshop/content/431960".to_string()
 }

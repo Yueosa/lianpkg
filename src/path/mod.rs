@@ -1,6 +1,61 @@
 use std::path::{Path, PathBuf};
 use std::fs;
 use crate::log;
+use crate::config::{self, Config};
+
+/// Resolves the final output directory for converted textures and resources.
+/// 
+/// Logic:
+/// 1. If `config.tex.converted_output_path` is set:
+///    - Base = expand(custom_path) / "tex_converted"
+///    - If `input_file` is provided, we try to maintain relative structure from `root_path`.
+/// 2. If not set:
+///    - Base = `root_path` / "tex_converted"
+///    - Maintains relative structure inside.
+pub fn resolve_tex_output_dir(config: &Config, root_path: &Path, input_file: Option<&Path>, relative_base: Option<&Path>) -> PathBuf {
+    let base_dir = if let Some(custom_path) = &config.tex.converted_output_path {
+        config::expand_path(custom_path).join("tex_converted")
+    } else {
+        root_path.join("tex_converted")
+    };
+
+    // If we have an input file and a base to calculate relativity from
+    if let (Some(file), Some(base)) = (input_file, relative_base) {
+        // Try to keep relative path structure
+        if let Ok(relative) = file.strip_prefix(base) {
+            // If using custom output path, we need to prepend the scene directory name
+            // because 'base' is usually the scene root (e.g. .../123456_scene)
+            // and 'relative' is inside it (e.g. materials/a.tex).
+            // We want: custom_path/tex_converted/123456_scene/materials/
+            
+            if config.tex.converted_output_path.is_some() {
+                if let Some(scene_dir_name) = base.file_name() {
+                    if let Some(parent) = relative.parent() {
+                        return base_dir.join(scene_dir_name).join(parent);
+                    }
+                }
+            }
+
+            if let Some(parent) = relative.parent() {
+                return base_dir.join(parent);
+            }
+        }
+    } 
+    // If we don't have a specific input file (e.g. copying resources for a whole folder),
+    // but we have a relative_base (which is likely the root of the package/scene),
+    // and root_path is the specific scene folder.
+    // We need to append the scene folder name to the base_dir if we are using a custom output path.
+    else if config.tex.converted_output_path.is_some() {
+         // When using custom output, we need to distinguish different scenes.
+         // Usually 'root_path' points to ".../Pkg_Unpacked/123456_scene"
+         // We want the result to be ".../tex_converted/123456_scene"
+         if let Some(dir_name) = root_path.file_name() {
+             return base_dir.join(dir_name);
+         }
+    }
+    
+    base_dir
+}
 
 pub fn get_target_files(path: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
