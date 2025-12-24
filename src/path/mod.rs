@@ -16,26 +16,77 @@ pub fn expand_path(path_str: &str) -> PathBuf {
     PathBuf::from(path_str)
 }
 
-pub fn default_workshop_path() -> String {
+fn get_steam_base_path() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         use winreg::enums::*;
         use winreg::RegKey;
-
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        if let Ok(steam) = hkcu.open_subkey("Software\\Valve\\Steam") {
-            if let Ok(path) = steam.get_value::<String, _>("SteamPath") {
-                let path = PathBuf::from(path);
-                return path
-                    .join("steamapps")
-                    .join("workshop")
-                    .join("content")
-                    .join("431960")
-                    .to_string_lossy()
-                    .to_string();
+        hkcu.open_subkey("Software\\Valve\\Steam")
+            .ok()
+            .and_then(|steam| steam.get_value::<String, _>("SteamPath").ok())
+            .map(PathBuf::from)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let p = expand_path("~/.local/share/Steam");
+        if p.exists() { Some(p) } else { None }
+    }
+}
+
+fn find_library_path(steam_base: &Path) -> Option<PathBuf> {
+    let vdf_path = steam_base.join("steamapps").join("libraryfolders.vdf");
+    if !vdf_path.exists() {
+        return None;
+    }
+    
+    let content = fs::read_to_string(&vdf_path).ok()?;
+    let mut current_path = None;
+    
+    for line in content.lines() {
+        let line = line.trim();
+        // Match "path" "..."
+        if line.starts_with("\"path\"") {
+            let parts: Vec<&str> = line.split('"').collect();
+            if parts.len() >= 4 {
+                let p = parts[3].replace("\\\\", "\\");
+                current_path = Some(PathBuf::from(p));
             }
         }
-        r"C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\431960".to_string()
+        // Match "431960"
+        if line.contains("\"431960\"") {
+            return current_path;
+        }
+    }
+    None
+}
+
+pub fn default_workshop_path() -> String {
+    if let Some(base_path) = get_steam_base_path() {
+        // Try to find actual library path from vdf
+        if let Some(lib_path) = find_library_path(&base_path) {
+             return lib_path
+                .join("steamapps")
+                .join("workshop")
+                .join("content")
+                .join("431960")
+                .to_string_lossy()
+                .to_string();
+        }
+        
+        // Fallback to default steam library
+        return base_path
+            .join("steamapps")
+            .join("workshop")
+            .join("content")
+            .join("431960")
+            .to_string_lossy()
+            .to_string();
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        r"C:\Program Files (x86)\Steam\steamapps\workshop\content\431960".to_string()
     }
 
     #[cfg(not(target_os = "windows"))]
