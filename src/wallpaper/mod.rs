@@ -7,11 +7,13 @@ pub struct WallpaperStats {
     pub pkg_count: usize,
 }
 
-pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output: &Path) -> Result<WallpaperStats, String> {
+pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output: &Path, enable_raw: bool) -> Result<WallpaperStats, String> {
     let mut stats = WallpaperStats { raw_count: 0, pkg_count: 0 };
     
-    if let Err(e) = fs::create_dir_all(raw_output) {
-        return Err(format!("Failed to create raw output dir: {}", e));
+    if enable_raw {
+        if let Err(e) = fs::create_dir_all(raw_output) {
+            return Err(format!("Failed to create raw output dir: {}", e));
+        }
     }
     if let Err(e) = fs::create_dir_all(pkg_temp_output) {
         return Err(format!("Failed to create pkg temp dir: {}", e));
@@ -68,6 +70,10 @@ pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output
             }
 
         } else {
+            if !enable_raw {
+                log::debug("extract_wallpapers", dir_name, "Skipping raw wallpaper (disabled)");
+                continue;
+            }
             log::info(&format!("Found Raw Wallpaper: {}", dir_name));
             let dest_dir = raw_output.join(dir_name);
             if dest_dir.exists() {
@@ -87,6 +93,53 @@ pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output
     
     log::success("Wallpaper extraction completed");
     Ok(stats)
+}
+
+pub fn estimate_requirements(search_path: &Path, enable_raw: bool) -> (u64, u64) {
+    let mut pkg_size = 0;
+    let mut raw_size = 0;
+
+    if let Ok(entries) = fs::read_dir(search_path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() { continue; }
+
+            if check_has_pkg(&path) {
+                if let Ok(sub_entries) = fs::read_dir(&path) {
+                    for sub in sub_entries.flatten() {
+                        let p = sub.path();
+                        if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
+                            if ext.eq_ignore_ascii_case("pkg") {
+                                if let Ok(meta) = fs::metadata(&p) {
+                                    pkg_size += meta.len();
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if enable_raw {
+                raw_size += get_dir_size(&path);
+            }
+        }
+    }
+    (pkg_size, raw_size)
+}
+
+fn get_dir_size(path: &Path) -> u64 {
+    let mut size = 0;
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                size += get_dir_size(&p);
+            } else {
+                if let Ok(meta) = fs::metadata(&p) {
+                    size += meta.len();
+                }
+            }
+        }
+    }
+    size
 }
 
 fn check_has_pkg(path: &Path) -> bool {

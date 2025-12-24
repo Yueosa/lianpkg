@@ -33,6 +33,9 @@ pub enum Command {
         raw_output: Option<String>,
         #[arg(long = "pkg-temp", value_name = "PATH")]
         pkg_temp: Option<String>,
+
+        #[arg(long = "no-raw")]
+        no_raw: bool,
     },
 
     Pkg {
@@ -71,6 +74,9 @@ pub enum Command {
         #[arg(long = "tex-out", value_name = "PATH")]
         tex_output: Option<String>,
 
+        #[arg(long = "no-raw")]
+        no_raw: bool,
+
         #[arg(long = "no-clean-temp")]
         no_clean_temp: bool,
         #[arg(long = "no-clean-unpacked")]
@@ -90,6 +96,7 @@ struct Overrides {
     tex_output_path: Option<String>,
     clean_pkg_temp: Option<bool>,
     clean_unpacked: Option<bool>,
+    enable_raw_output: Option<bool>,
 }
 
 pub fn run_cli() {
@@ -123,6 +130,7 @@ fn run(cli: Cli) {
         tex_output: None,
         no_clean_temp: false,
         no_clean_unpacked: false,
+        no_raw: false,
         dry_run: false,
     });
 
@@ -163,10 +171,11 @@ fn collect_overrides(command: &Command) -> Overrides {
     let mut ov = Overrides::default();
 
     match command {
-        Command::Wallpaper { search, search_pos, raw_output, raw_pos, pkg_temp, pkg_temp_pos } => {
+        Command::Wallpaper { search, search_pos, raw_output, raw_pos, pkg_temp, pkg_temp_pos, no_raw } => {
             ov.workshop_path = search.clone().or_else(|| search_pos.clone());
             ov.raw_output_path = raw_output.clone().or_else(|| raw_pos.clone());
             ov.pkg_temp_path = pkg_temp.clone().or_else(|| pkg_temp_pos.clone());
+            if *no_raw { ov.enable_raw_output = Some(false); }
         }
         Command::Pkg { input, input_pos, output, output_pos } => {
             ov.pkg_temp_path = input.clone().or_else(|| input_pos.clone());
@@ -176,7 +185,7 @@ fn collect_overrides(command: &Command) -> Overrides {
             ov.unpacked_output_path = input.clone().or_else(|| input_pos.clone());
             ov.tex_output_path = output.clone();
         }
-        Command::Auto { search, raw_output, pkg_temp, input, unpacked_output, tex_output, no_clean_temp, no_clean_unpacked, .. } => {
+        Command::Auto { search, raw_output, pkg_temp, input, unpacked_output, tex_output, no_clean_temp, no_clean_unpacked, no_raw, .. } => {
             ov.workshop_path = search.clone();
             ov.raw_output_path = raw_output.clone();
             ov.pkg_temp_path = pkg_temp.clone();
@@ -184,6 +193,7 @@ fn collect_overrides(command: &Command) -> Overrides {
             ov.tex_output_path = tex_output.clone();
             if *no_clean_temp { ov.clean_pkg_temp = Some(false); }
             if *no_clean_unpacked { ov.clean_unpacked = Some(false); }
+            if *no_raw { ov.enable_raw_output = Some(false); }
         }
     }
 
@@ -198,6 +208,7 @@ fn apply_overrides(config: &mut Config, ov: Overrides) {
     if let Some(v) = ov.tex_output_path { config.tex.converted_output_path = Some(v); }
     if let Some(v) = ov.clean_pkg_temp { config.unpack.clean_pkg_temp = v; }
     if let Some(v) = ov.clean_unpacked { config.unpack.clean_unpacked = v; }
+    if let Some(v) = ov.enable_raw_output { config.wallpaper.enable_raw_output = v; }
 }
 
 fn print_dry_run(config: &Config) {
@@ -205,6 +216,7 @@ fn print_dry_run(config: &Config) {
     println!("wallpaper.search_path      => {:?}", config.wallpaper.workshop_path);
     println!("wallpaper.raw_output_path  => {:?}", config.wallpaper.raw_output_path);
     println!("wallpaper.pkg_temp_path    => {:?}", config.wallpaper.pkg_temp_path);
+    println!("wallpaper.enable_raw_output=> {}", config.wallpaper.enable_raw_output);
     println!("unpack.unpacked_output     => {:?}", config.unpack.unpacked_output_path);
     println!("tex.converted_output_path  => {:?}", config.tex.converted_output_path.as_deref().unwrap_or("<默认 tex_converted>"));
     println!("clean_pkg_temp             => {}", config.unpack.clean_pkg_temp);

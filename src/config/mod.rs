@@ -15,7 +15,11 @@ pub struct WallpaperConfig {
     pub workshop_path: String,
     pub raw_output_path: String,
     pub pkg_temp_path: String,
+    #[serde(default = "default_true")]
+    pub enable_raw_output: bool,
 }
+
+fn default_true() -> bool { true }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UnpackConfig {
@@ -41,6 +45,7 @@ impl Default for Config {
                 workshop_path,
                 raw_output_path,
                 pkg_temp_path,
+                enable_raw_output: true,
             },
             unpack: UnpackConfig {
                 unpacked_output_path,
@@ -114,6 +119,11 @@ workshop_path = "{}"
 #         - Windows 默认: .\Wallpapers_Raw
 #         - Linux 默认: ~/.local/share/lianpkg/Wallpapers_Raw
 raw_output_path = "{}"
+
+# === 是否提取原始壁纸（非 pkg 文件） ===
+#     如果设置为 false，将跳过复制非 pkg 壁纸到 raw_output_path
+#     Default/默认: true
+enable_raw_output = true
 
 # === 需要解包的 .pkg 文件暂存路径 === 
 #     为了不影响 wallpaper 结构, 本程序将会复制一份 .pkg 到这个临时文件夹

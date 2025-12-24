@@ -12,6 +12,8 @@ texture2ddecoder = "0.1.2"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 dirs = "5.0"
+fs2 = "0.4"
+human_bytes = "0.4"
 clap = { version = "4.5", features = ["derive"] }
 
 [profile.release]

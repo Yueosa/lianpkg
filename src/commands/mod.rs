@@ -8,7 +8,7 @@ pub fn run_wallpaper(config: &Config) -> Result<wallpaper::WallpaperStats, Strin
     let raw_output_path = path::expand_path(&config.wallpaper.raw_output_path);
     let pkg_temp_path = path::expand_path(&config.wallpaper.pkg_temp_path);
 
-    wallpaper::extract_wallpapers(&search_path, &raw_output_path, &pkg_temp_path)
+    wallpaper::extract_wallpapers(&search_path, &raw_output_path, &pkg_temp_path, config.wallpaper.enable_raw_output)
 }
 
 pub fn run_pkg(config: &Config) -> Result<usize, String> {
@@ -131,6 +131,73 @@ pub fn run_tex(config: &Config) -> Result<usize, String> {
 
 pub fn run_auto(config: &Config) {
     log::title("🤖 Starting Auto Mode");
+
+    // Disk Usage Estimation
+    let search_path = path::expand_path(&config.wallpaper.workshop_path);
+    log::info("Calculating estimated disk usage...");
+    let (pkg_size, raw_size) = wallpaper::estimate_requirements(&search_path, config.wallpaper.enable_raw_output);
+    
+    // Estimation logic:
+    // Pkg_Temp: 1x PKG size
+    // Pkg_Unpacked: ~1.5x PKG size (unpacked)
+    // Tex_Converted: ~2.0x PKG size (textures)
+    // Raw_Output: 1x Raw size
+    let est_pkg_temp = pkg_size;
+    let est_unpacked = (pkg_size as f64 * 1.5) as u64;
+    let est_converted = (pkg_size as f64 * 2.0) as u64;
+    let est_raw = raw_size;
+
+    let peak_usage = est_pkg_temp + est_unpacked + est_converted + est_raw;
+    let final_usage = est_raw + est_converted + 
+        if config.unpack.clean_unpacked { 0 } else { est_unpacked } +
+        if config.unpack.clean_pkg_temp { 0 } else { est_pkg_temp };
+
+    use human_bytes::human_bytes;
+    println!("==========================================");
+    println!("          Disk Usage Estimation           ");
+    println!("==========================================");
+    println!("Found PKG Files:      {}", human_bytes(pkg_size as f64));
+    if config.wallpaper.enable_raw_output {
+        println!("Found Raw Files:      {}", human_bytes(raw_size as f64));
+    } else {
+        println!("Raw Files:            Skipped (--no-raw)");
+    }
+    println!("------------------------------------------");
+    println!("Estimated Peak Usage: {}", human_bytes(peak_usage as f64));
+    println!("Estimated Final Usage:{}", human_bytes(final_usage as f64));
+    
+    // Check available space
+    let output_path = path::expand_path(&config.unpack.unpacked_output_path);
+    // Try to find an existing parent to check space
+    let mut check_path = output_path.clone();
+    while !check_path.exists() {
+        if let Some(parent) = check_path.parent() {
+            check_path = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+    
+    if check_path.exists() {
+        match fs2::available_space(&check_path) {
+            Ok(available) => {
+                println!("Available Space:      {}", human_bytes(available as f64));
+                if available < peak_usage {
+                    log::error("⚠️  WARNING: Insufficient disk space! ⚠️");
+                    println!("You might run out of space during processing.");
+                    println!("Required: {}, Available: {}", human_bytes(peak_usage as f64), human_bytes(available as f64));
+                    println!("Press Ctrl+C to cancel or Enter to continue anyway...");
+                    let _ = std::io::stdin().read_line(&mut String::new());
+                } else {
+                    println!("Disk Space Check:     OK ✅");
+                }
+            },
+            Err(_) => {
+                println!("Available Space:      Unknown (Check failed)");
+            }
+        }
+    }
+    println!("==========================================");
     
     let result = (|| -> Result<(wallpaper::WallpaperStats, usize, usize), String> {
         let wp_stats = run_wallpaper(config)?;
