@@ -206,6 +206,14 @@ fn cleanup_unpacked(dir: &Path) -> std::io::Result<()> {
         }
     }
 
+    // Remove the directory itself if it is empty
+    // 如果目录为空，则删除目录本身
+    if let Ok(mut entries) = fs::read_dir(dir) {
+        if entries.next().is_none() {
+            fs::remove_dir(dir)?;
+        }
+    }
+
     Ok(())
 }
 
