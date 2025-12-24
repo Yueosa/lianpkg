@@ -100,49 +100,47 @@ pub fn load_config(custom_path: Option<PathBuf>) -> ConfigStatus {
     if !default_exists && !user_exists {
         let default_config = Config::default();
         
-        let commented_config = format!(r#"# LianPkg Configuration File / LianPkg 配置文件
+        let commented_config = format!(r#"# === LianPkg Configuration File / LianPkg 配置文件 ===
 
 [wallpaper]
-# Steam Workshop 壁纸下载路径
-# 本程序将会从这个路径下扫描 wallpaper 壁纸
-# Windows 默认: C:\Program Files (x86)\Steam\steamapps\workshop\content\431960
-# Linux 默认: ~/.local/share/Steam/steamapps/workshop/content/431960
-
+# === Steam Workshop 壁纸下载路径 ===
+#     本程序将会从这个路径下扫描 wallpaper 壁纸
+#         - Windows 默认: C:\Program Files (x86)\Steam\steamapps\workshop\content\431960
+#         - Linux 默认: ~/.local/share/Steam/steamapps/workshop/content/431960
 workshop_path = "{}"
 
-# 不需要解包的壁纸输出路径
-# 有些 wallpaper 壁纸不需要解包, 就会放到这个路径下
-# Windows 默认: .\Wallpapers_Raw
-# Linux 默认: ~/.local/share/lianpkg/Wallpapers_Raw
-
+# === 不需要解包的壁纸输出路径 ===
+#     有些 wallpaper 壁纸不需要解包, 就会放到这个路径下
+#         - Windows 默认: .\Wallpapers_Raw
+#         - Linux 默认: ~/.local/share/lianpkg/Wallpapers_Raw
 raw_output_path = "{}"
 
-# 需要解包的 .pkg 文件暂存路径
-# 为了不影响 wallpaper 结构, 本程序将会复制一份 .pkg 到这个临时文件夹
-# 解包完成后就会清空, 如果你需要保留 .pkg 源文件可以在下面配置 clean_pkg_temp = false
-# Windows 默认: .\Pkg_Temp
-# Linux 默认: ~/.local/share/lianpkg/Pkg_Temp
-
+# === 需要解包的 .pkg 文件暂存路径 === 
+#     为了不影响 wallpaper 结构, 本程序将会复制一份 .pkg 到这个临时文件夹
+#     解包完成后就会清空, 如果你需要保留 .pkg 源文件可以在下面配置 clean_pkg_temp = false
+#         - Windows 默认: .\Pkg_Temp
+#         - Linux 默认: ~/.local/share/lianpkg/Pkg_Temp
 pkg_temp_path = "{}"
 
-[unpack]
-# 解包后的文件输出路径
-# 这是 .pkg 文件第一次解包后的产物路径(不是最终产物), 如果需要你需要保留可以在下面配置 clean_unpacked = false
-# Windows 默认: .\Pkg_Unpacked
-# Linux 默认: ~/.local/share/lianpkg/Pkg_Unpacked
 
+[unpack]
+# === 解包后的文件输出路径 ===
+#     这是 .pkg 文件第一次解包后的产物路径(不是最终产物), 如果需要你需要保留可以在下面配置 clean_unpacked = false
+#         - Windows 默认: .\Pkg_Unpacked
+#         - Linux 默认: ~/.local/share/lianpkg/Pkg_Unpacked
 unpacked_output_path = "{}"
 
-# 是否在结束时清理 Pkg_Temp 目录
+# === 是否在结束时清理 Pkg_Temp 目录===
 clean_pkg_temp = true
 
-# 是否在结束时清理 Pkg_Unpacked 中除 tex_converted 以外的内容
+# === 是否在结束时清理 Pkg_Unpacked 中除 tex_converted 以外的内容 ===
 clean_unpacked = true
 
+
 [tex]
-# .tex 转换后的图片输出路径 (输出 3)
-# 这是最终产物的目录, 可以不配置, 也可以配置到指定路径
-# 如果留空，则默认在解包路径下的 tex_converted 子目录中
+# === .tex 转换后的图片输出路径 (输出 3) ===
+#     这是最终产物的目录, 可以不配置, 也可以配置到指定路径
+#     如果留空，则默认在解包路径下的 tex_converted 子目录中
 # converted_output_path = "..."
 "#, 
             default_config.wallpaper.workshop_path.replace("\\", "\\\\"),
