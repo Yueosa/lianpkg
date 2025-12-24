@@ -38,7 +38,7 @@ impl<'a> Reader<'a> {
     }
 }
 
-pub fn unpack_pkg(file_path: &Path, output_base: &Path) {
+pub fn unpack_pkg(file_path: &Path, output_base: &Path) -> Result<(), String> {
     log::title(&format!("📦 Unpacking: {:?}", file_path.file_name().unwrap_or_default()));
     log::indent();
     log::debug("unpack_pkg", &format!("{:?}, {:?}", file_path, output_base), "Starting unpack");
@@ -46,9 +46,8 @@ pub fn unpack_pkg(file_path: &Path, output_base: &Path) {
     let data = match fs::read(file_path) {
         Ok(d) => d,
         Err(e) => {
-            log::error(&format!("Failed to read file {:?}: {}", file_path, e));
             log::outdent();
-            return;
+            return Err(format!("Failed to read file {:?}: {}", file_path, e));
         }
     };
 
@@ -78,8 +77,8 @@ pub fn unpack_pkg(file_path: &Path, output_base: &Path) {
         let end = start + size as usize;
         
         if end > data.len() {
-            log::error(&format!("Error: File {} entry out of bounds", name));
-            continue;
+            log::outdent();
+            return Err(format!("Error: File {} entry out of bounds", name));
         }
 
         let content = &data[start..end];
@@ -88,8 +87,8 @@ pub fn unpack_pkg(file_path: &Path, output_base: &Path) {
         
         if let Some(parent) = output_path.parent() {
             if let Err(e) = fs::create_dir_all(parent) {
-                log::error(&format!("Failed to create directory {:?}: {}", parent, e));
-                continue;
+                log::outdent();
+                return Err(format!("Failed to create directory {:?}: {}", parent, e));
             }
         }
 
@@ -99,10 +98,12 @@ pub fn unpack_pkg(file_path: &Path, output_base: &Path) {
                 extracted_count += 1;
             }
             Err(e) => {
-                log::error(&format!("Failed to write file {:?}: {}", output_path, e));
+                log::outdent();
+                return Err(format!("Failed to write file {:?}: {}", output_path, e));
             }
         }
     }
     log::success(&format!("Successfully extracted {} files to {:?}", extracted_count, output_base));
     log::outdent();
+    Ok(())
 }

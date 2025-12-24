@@ -7,16 +7,14 @@ pub struct WallpaperStats {
     pub pkg_count: usize,
 }
 
-pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output: &Path) -> WallpaperStats {
+pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output: &Path) -> Result<WallpaperStats, String> {
     let mut stats = WallpaperStats { raw_count: 0, pkg_count: 0 };
     
     if let Err(e) = fs::create_dir_all(raw_output) {
-        log::error(&format!("Failed to create raw output dir: {}", e));
-        return stats;
+        return Err(format!("Failed to create raw output dir: {}", e));
     }
     if let Err(e) = fs::create_dir_all(pkg_temp_output) {
-        log::error(&format!("Failed to create pkg temp dir: {}", e));
-        return stats;
+        return Err(format!("Failed to create pkg temp dir: {}", e));
     }
 
     log::title("Starting Wallpaper Extraction");
@@ -25,8 +23,7 @@ pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output
     let entries = match fs::read_dir(search_path) {
         Ok(e) => e,
         Err(e) => {
-            log::error(&format!("Failed to read search path: {}", e));
-            return stats;
+            return Err(format!("Failed to read search path: {}", e));
         }
     };
 
@@ -61,7 +58,7 @@ pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output
                             
                             log::debug("extract_wallpapers", &format!("Copying {:?}", sub_path), "Processing PKG");
                             if let Err(e) = fs::copy(&sub_path, &dest) {
-                                log::error(&format!("Failed to copy pkg: {}", e));
+                                return Err(format!("Failed to copy pkg: {}", e));
                             } else {
                                 stats.pkg_count += 1;
                             }
@@ -79,7 +76,7 @@ pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output
             }
 
             if let Err(e) = copy_dir_recursive(&path, &dest_dir) {
-                log::error(&format!("Failed to copy raw wallpaper {}: {}", dir_name, e));
+                return Err(format!("Failed to copy raw wallpaper {}: {}", dir_name, e));
             } else {
                 stats.raw_count += 1;
                 log::success(&format!("Copied raw wallpaper: {}", dir_name));
@@ -89,7 +86,7 @@ pub fn extract_wallpapers(search_path: &Path, raw_output: &Path, pkg_temp_output
     }
     
     log::success("Wallpaper extraction completed");
-    stats
+    Ok(stats)
 }
 
 fn check_has_pkg(path: &Path) -> bool {

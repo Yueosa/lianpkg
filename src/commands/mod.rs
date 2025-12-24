@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::config::Config;
 use crate::{log, path, tex, unpacker, wallpaper};
 
-pub fn run_wallpaper(config: &Config) -> wallpaper::WallpaperStats {
+pub fn run_wallpaper(config: &Config) -> Result<wallpaper::WallpaperStats, String> {
     let search_path = path::expand_path(&config.wallpaper.workshop_path);
     let raw_output_path = path::expand_path(&config.wallpaper.raw_output_path);
     let pkg_temp_path = path::expand_path(&config.wallpaper.pkg_temp_path);
@@ -11,7 +11,7 @@ pub fn run_wallpaper(config: &Config) -> wallpaper::WallpaperStats {
     wallpaper::extract_wallpapers(&search_path, &raw_output_path, &pkg_temp_path)
 }
 
-pub fn run_pkg(config: &Config) -> usize {
+pub fn run_pkg(config: &Config) -> Result<usize, String> {
     let input_path = path::expand_path(&config.wallpaper.pkg_temp_path);
     let output_path = path::expand_path(&config.unpack.unpacked_output_path);
 
@@ -20,8 +20,7 @@ pub fn run_pkg(config: &Config) -> usize {
     log::info(&format!("Output: {:?}", output_path));
 
     if !input_path.exists() {
-        log::error("Input path does not exist");
-        return 0;
+        return Err("Input path does not exist".to_string());
     }
 
     let files = path::get_target_files(&input_path);
@@ -29,7 +28,7 @@ pub fn run_pkg(config: &Config) -> usize {
 
     if pkg_files.is_empty() {
         log::info("No .pkg files found.");
-        return 0;
+        return Ok(0);
     }
 
     let mut count = 0;
@@ -38,10 +37,9 @@ pub fn run_pkg(config: &Config) -> usize {
         let pkg_output_dir = get_unique_output_path(&output_path, file_stem);
         
         if let Err(e) = fs::create_dir_all(&pkg_output_dir) {
-            log::error(&format!("Failed to create output dir: {}", e));
-            continue;
+            return Err(format!("Failed to create output dir: {}", e));
         }
-        unpacker::unpack_pkg(&file, &pkg_output_dir);
+        unpacker::unpack_pkg(&file, &pkg_output_dir)?;
 
         let workshop_path = path::expand_path(&config.wallpaper.workshop_path);
         if workshop_path.exists() {
@@ -57,14 +55,14 @@ pub fn run_pkg(config: &Config) -> usize {
                 
                 log::info(&format!("Copying additional resources from {:?} to {:?}", raw_source, resource_dest));
                 if let Err(e) = copy_non_pkg_files(&raw_source, &resource_dest) {
-                    log::error(&format!("Failed to copy resources: {}", e));
+                    return Err(format!("Failed to copy resources: {}", e));
                 }
             }
         }
 
         count += 1;
     }
-    count
+    Ok(count)
 }
 
 fn copy_non_pkg_files(src: &Path, dst: &Path) -> std::io::Result<()> {
@@ -88,15 +86,14 @@ fn copy_non_pkg_files(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn run_tex(config: &Config) -> usize {
+pub fn run_tex(config: &Config) -> Result<usize, String> {
     let input_path = path::expand_path(&config.unpack.unpacked_output_path);
 
     log::title("🚀 Starting TEX Conversion");
     log::info(&format!("Input: {:?}", input_path));
 
     if !input_path.exists() {
-        log::error("Input path does not exist");
-        return 0;
+        return Err("Input path does not exist".to_string());
     }
 
     let files = path::get_target_files(&input_path);
@@ -104,7 +101,7 @@ pub fn run_tex(config: &Config) -> usize {
 
     if tex_files.is_empty() {
         log::info("No .tex files found.");
-        return 0;
+        return Ok(0);
     }
 
     let mut count = 0;
@@ -123,48 +120,70 @@ pub fn run_tex(config: &Config) -> usize {
         );
 
         if let Err(e) = fs::create_dir_all(&final_output_dir) {
-            log::error(&format!("Failed to create output dir: {}", e));
-            continue;
+            return Err(format!("Failed to create output dir: {}", e));
         }
         let output_filename = final_output_dir.join(file_stem);
-        tex::process_tex(&file, &output_filename);
+        tex::process_tex(&file, &output_filename)?;
         count += 1;
     }
-    count
+    Ok(count)
 }
 
 pub fn run_auto(config: &Config) {
     log::title("🤖 Starting Auto Mode");
-    let wp_stats = run_wallpaper(config);
-    let pkg_count = run_pkg(config);
-    let tex_count = run_tex(config);
-
-    if config.unpack.clean_pkg_temp {
-        log::info("Cleaning Pkg_Temp...");
-        if let Err(e) = cleanup_pkg_temp(&path::expand_path(&config.wallpaper.pkg_temp_path)) {
-            log::error(&format!("Cleanup Pkg_Temp failed: {}", e));
-        }
-    }
-
-    if config.unpack.clean_unpacked {
-        log::info("Cleaning Pkg_Unpacked (keeping tex_converted)...");
-        if let Err(e) = cleanup_unpacked(&path::expand_path(&config.unpack.unpacked_output_path)) {
-            log::error(&format!("Cleanup Pkg_Unpacked failed: {}", e));
-        }
-    }
     
-    log::title("✨ Auto Mode Completed ✨");
-    println!("==========================================");
-    println!("             Summary Report               ");
-    println!("==========================================");
-    println!("Wallpaper Extraction:");
-    println!("  - Raw Wallpapers:   {}", wp_stats.raw_count);
-    println!("  - PKGs Extracted:   {}", wp_stats.pkg_count);
-    println!("PKG Unpacking:");
-    println!("  - PKGs Unpacked:    {}", pkg_count);
-    println!("TEX Conversion:");
-    println!("  - TEXs Converted:   {}", tex_count);
-    println!("==========================================");
+    let result = (|| -> Result<(wallpaper::WallpaperStats, usize, usize), String> {
+        let wp_stats = run_wallpaper(config)?;
+        let pkg_count = run_pkg(config)?;
+        let tex_count = run_tex(config)?;
+        Ok((wp_stats, pkg_count, tex_count))
+    })();
+
+    match result {
+        Ok((wp_stats, pkg_count, tex_count)) => {
+            if config.unpack.clean_pkg_temp {
+                log::info("Cleaning Pkg_Temp...");
+                if let Err(e) = cleanup_pkg_temp(&path::expand_path(&config.wallpaper.pkg_temp_path)) {
+                    log::error(&format!("Cleanup Pkg_Temp failed: {}", e));
+                }
+            }
+
+            if config.unpack.clean_unpacked {
+                log::info("Cleaning Pkg_Unpacked (keeping tex_converted)...");
+                if let Err(e) = cleanup_unpacked(&path::expand_path(&config.unpack.unpacked_output_path)) {
+                    log::error(&format!("Cleanup Pkg_Unpacked failed: {}", e));
+                }
+            }
+            
+            log::title("✨ Auto Mode Completed ✨");
+            println!("==========================================");
+            println!("             Summary Report               ");
+            println!("==========================================");
+            println!("Wallpaper Extraction:");
+            println!("  - Raw Wallpapers:   {}", wp_stats.raw_count);
+            println!("  - PKGs Extracted:   {}", wp_stats.pkg_count);
+            println!("PKG Unpacking:");
+            println!("  - PKGs Unpacked:    {}", pkg_count);
+            println!("TEX Conversion:");
+            println!("  - TEXs Converted:   {}", tex_count);
+            println!("==========================================");
+        },
+        Err(e) => {
+            log::error(&format!("❌ Auto Mode Failed: {}", e));
+            log::info("Performing emergency cleanup...");
+            
+            // Always try to clean up temp files on error if they exist
+            let _ = cleanup_pkg_temp(&path::expand_path(&config.wallpaper.pkg_temp_path));
+            let _ = cleanup_unpacked(&path::expand_path(&config.unpack.unpacked_output_path));
+            
+            println!("==========================================");
+            println!("             ERROR REPORT                 ");
+            println!("==========================================");
+            println!("An error occurred during execution:");
+            println!("{}", e);
+            println!("==========================================");
+        }
+    }
 }
 
 fn cleanup_pkg_temp(dir: &Path) -> std::io::Result<()> {

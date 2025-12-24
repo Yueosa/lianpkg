@@ -137,13 +137,19 @@ fn run(cli: Cli) {
 
     match command {
         Command::Wallpaper { .. } => {
-            let _ = commands::run_wallpaper(&config);
+            if let Err(e) = commands::run_wallpaper(&config) {
+                log::error(&format!("Wallpaper extraction failed: {}", e));
+            }
         }
         Command::Pkg { .. } => {
-            let _ = commands::run_pkg(&config);
+            if let Err(e) = commands::run_pkg(&config) {
+                log::error(&format!("PKG unpacking failed: {}", e));
+            }
         }
         Command::Tex { .. } => {
-            let _ = commands::run_tex(&config);
+            if let Err(e) = commands::run_tex(&config) {
+                log::error(&format!("TEX conversion failed: {}", e));
+            }
         }
         Command::Auto { .. } => {
             commands::run_auto(&config);
