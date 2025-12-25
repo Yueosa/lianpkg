@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::fs;
-use crate::log;
+#[cfg(target_os = "windows")]
+use std::env;
 
 pub fn expand_path(path_str: &str) -> PathBuf {
     if path_str.starts_with("~") {
@@ -97,23 +98,30 @@ pub fn default_workshop_path() -> String {
 
 pub fn default_raw_output_path() -> String {
     #[cfg(target_os = "windows")]
-    { r".\\Wallpapers_Raw".to_string() }
+    { windows_appdata_path("Wallpapers_Raw") }
     #[cfg(not(target_os = "windows"))]
     { "~/.local/share/lianpkg/Wallpapers_Raw".to_string() }
 }
 
 pub fn default_pkg_temp_path() -> String {
     #[cfg(target_os = "windows")]
-    { r".\\Pkg_Temp".to_string() }
+    { windows_appdata_path("Pkg_Temp") }
     #[cfg(not(target_os = "windows"))]
     { "~/.local/share/lianpkg/Pkg_Temp".to_string() }
 }
 
 pub fn default_unpacked_output_path() -> String {
     #[cfg(target_os = "windows")]
-    { r".\\Pkg_Unpacked".to_string() }
+    { windows_appdata_path("Pkg_Unpacked") }
     #[cfg(not(target_os = "windows"))]
     { "~/.local/share/lianpkg/Pkg_Unpacked".to_string() }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_appdata_path(sub: &str) -> String {
+    env::var("APPDATA")
+        .map(|p| PathBuf::from(p).join("lianpkg").join(sub).to_string_lossy().to_string())
+        .unwrap_or_else(|_| format!(".\\{}", sub))
 }
 
 pub fn pkg_temp_dest(dir_name: &str, file_name: &str) -> String {
@@ -154,16 +162,11 @@ pub fn resolve_tex_output_dir(
 
 pub fn get_target_files(path: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    log::debug("get_target_files", &format!("{:?}", path), "Scanning for files...");
 
     if path.is_file() {
         files.push(path.to_path_buf());
-        log::debug("get_target_files", "N/A", "Input is a single file");
     } else if path.is_dir() {
         visit_dirs(path, &mut files);
-        log::debug("get_target_files", "N/A", &format!("Found {} files in directory", files.len()));
-    } else {
-        log::info(&format!("Path does not exist or is not accessible: {:?}", path));
     }
     files
 }
@@ -203,4 +206,21 @@ pub fn find_project_root(path: &Path) -> Option<PathBuf> {
         current = p.parent();
     }
     None
+}
+
+pub fn get_unique_output_path(base: &Path, name: &str) -> PathBuf {
+    let mut target = base.join(name);
+    if !target.exists() {
+        return target;
+    }
+
+    let mut i = 1;
+    loop {
+        let new_name = format!("{}-{}", name, i);
+        target = base.join(&new_name);
+        if !target.exists() {
+            return target;
+        }
+        i += 1;
+    }
 }

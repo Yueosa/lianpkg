@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::path;
+use crate::core::path;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -65,6 +65,21 @@ pub enum ConfigStatus {
     Error(String),
 }
 
+/// Delete the default config directory (e.g., ~/.config/lianpkg or %APPDATA%/lianpkg).
+/// Returns Ok on success or if the directory does not exist; otherwise returns the IO error as string.
+pub fn delete_config_dir() -> Result<(), String> {
+    let config_dir = dirs::config_dir()
+        .map(|d| d.join("lianpkg"))
+        .ok_or_else(|| "Could not determine config directory".to_string())?;
+
+    if !config_dir.exists() {
+        return Ok(());
+    }
+
+    std::fs::remove_dir_all(&config_dir)
+        .map_err(|e| format!("Failed to delete config dir {}: {}", config_dir.display(), e))
+}
+
 pub fn load_config(custom_path: Option<PathBuf>) -> ConfigStatus {
     if let Some(path) = custom_path {
         let mut final_config = Config::default();
@@ -78,16 +93,9 @@ pub fn load_config(custom_path: Option<PathBuf>) -> ConfigStatus {
         return ConfigStatus::Loaded(final_config);
     }
 
-    let config_dir = if cfg!(target_os = "windows") {
-        match std::env::current_exe() {
-            Ok(path) => path.parent().unwrap_or(&path).to_path_buf(),
-            Err(e) => return ConfigStatus::Error(format!("Failed to get current exe path: {}", e)),
-        }
-    } else {
-        match dirs::config_dir() {
-            Some(d) => d.join("lianpkg"),
-            None => return ConfigStatus::Error("Could not determine config directory".to_string()),
-        }
+    let config_dir = match dirs::config_dir() {
+        Some(d) => d.join("lianpkg"),
+        None => return ConfigStatus::Error("Could not determine config directory".to_string()),
     };
 
     if !config_dir.exists() {

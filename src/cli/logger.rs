@@ -12,10 +12,12 @@ pub fn is_debug() -> bool {
     DEBUG_MODE.load(Ordering::Relaxed)
 }
 
+#[allow(dead_code)]
 pub fn indent() {
     INDENT_LEVEL.fetch_add(1, Ordering::Relaxed);
 }
 
+#[allow(dead_code)]
 pub fn outdent() {
     INDENT_LEVEL.fetch_sub(1, Ordering::Relaxed);
 }
@@ -64,6 +66,7 @@ pub fn error(msg: &str) {
     }
 }
 
+#[allow(dead_code)]
 pub fn debug(func_name: &str, args: &str, msg: &str) {
     if is_debug() {
         let time = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");

@@ -1,6 +1,6 @@
 use std::io::{self, Read, Seek};
 use byteorder::{ReadBytesExt, LittleEndian};
-use crate::tex::structs::*;
+use super::structs::*;
 
 pub fn read_tex<R: Read + Seek>(mut reader: R) -> io::Result<TexFile> {
     let magic1 = read_n_string(&mut reader, 16)?;

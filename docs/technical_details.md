@@ -1,130 +1,112 @@
-# lianpkg 技术文档与算法解析
+## src 目录结构
 
-本文档旨在详细解析 `lianpkg` 项目中涉及的核心文件格式（.pkg, .tex）及其解包与转换算法。本文档既适合想要了解 Wallpaper Engine 壁纸工作原理的用户，也适合想要深入研究代码实现的开发者。
+```
+src/
+	lib.rs            # 导出 core 与 api
+	main.rs           # CLI 入口
+	api/
+		mod.rs          # 汇总 native/ffi/types
+		native.rs       # 纯 Rust API（直接调用核心逻辑）
+		ffi.rs          # C 接口导出（接受 JSON 配置）
+		types.rs        # API 通用返回类型
+	cli/
+		mod.rs          # clap 命令行定义与入口
+		handlers.rs     # 针对每个子命令的执行封装
+		logger.rs       # 轻量日志输出（可调试模式）
+	core/
+		mod.rs          # 核心模块聚合
+		config/mod.rs   # 配置结构与合并加载
+		path/mod.rs     # 路径工具：默认路径、文件搜寻等
+		paper/mod.rs    # 壁纸收集（拷贝 raw / 复制 pkg）
+		pkg/mod.rs      # .pkg 解包器
+		tex/
+			mod.rs        # .tex 处理入口
+			reader.rs     # TEX 格式解析
+			converter.rs  # TEX -> 图片/视频 转换
+			structs.rs    # TEX 数据结构
+```
 
-## 1. Wallpaper Engine 工作机制简述
+## 配置结构（Config JSON/TOML）
 
-Wallpaper Engine 的壁纸主要分为两种类型：
-1.  **场景壁纸 (Scene Wallpapers):** 这是最复杂的类型，通常包含 3D 模型、粒子效果、着色器和脚本。这些资源通常被打包在一个或多个 `.pkg` 文件中，以保护资源并优化加载。
-2.  **视频/Web 壁纸:** 这类壁纸结构较简单，通常直接包含 `.mp4` 视频文件或 `index.html` 网页文件。
+字段与类型（对应 core::config::Config）：
+- wallpaper: { workshop_path: String, raw_output_path: String, pkg_temp_path: String, enable_raw_output: bool }
+- unpack: { unpacked_output_path: String, clean_pkg_temp: bool, clean_unpacked: bool }
+- tex: { converted_output_path: Option<String> }
 
-`lianpkg` 的主要目标是处理 **场景壁纸**。在这类壁纸的目录中，你通常会看到：
-*   `project.json`: 描述壁纸的元数据（标题、作者、预览图等）。
-*   `scene.pkg`: 打包的核心资源文件（纹理、模型、着色器代码等）。
-*   其他 `.json` 文件: 描述场景的具体配置。
+默认路径（按平台自动展开）来自 core::path::default_*，可用 `~` 开头路径自动展开。
 
-## 2. 涉及的文件格式
+## API 库（Rust 调用）
 
-在解包过程中，我们主要关注以下几种文件：
+模块 api::native（直接返回 Result）：
+- run_wallpaper(config: &Config) -> Result<WallpaperStats, String>
+	- 作用：扫描 workshop，复制 raw 壁纸或 .pkg 到临时目录。
+- run_pkg(config: &Config) -> Result<PkgStats, String>
+	- 作用：对 pkg_temp 中的 .pkg 逐个解包到 unpacked_output_path，并复制关联资源。
+- run_tex(config: &Config) -> Result<TexStats, String>
+	- 作用：遍历解包目录中 .tex，输出 PNG/视频到 tex_converted（或自定义路径）。
+- run_auto(config: &Config) -> Result<AutoStats, String>
+	- 作用：按顺序执行 wallpaper → pkg → tex，并按配置选择清理临时目录。
+- cleanup_temp(config: &Config)
+	- 作用：删除 pkg_temp_path（无错误返回）。
+- cleanup_unpacked(config: &Config)
+	- 作用：当前为空操作/占位，避免误删。
 
-*   **`.pkg` (Package):** 这是一个自定义的归档格式，类似于 `.zip` 或 `.tar`，但结构更简单且专用于该软件。它将多个小文件合并为一个大文件，包含文件名、偏移量和大小信息。
-*   **`.tex` (Texture):** 这是 Wallpaper Engine 专用的纹理格式。它不仅仅是图片，还包含了纹理的元数据（如过滤模式、包裹模式）以及可能的 mipmap 层级。内部图像数据可能是原始像素（RGBA）、压缩纹理（DXT/BC 算法）或者是嵌入的常见图片格式（PNG/JPEG）。
-*   **`.json`:** 标准的 JSON 格式，用于存储配置信息。解包后，这些文件通常是明文可读的。
+返回数据结构（api::native 与 api::types）：
+- WallpaperStats { raw_count, pkg_count }
+- PkgStats { processed_files, extracted_files }
+- TexStats { processed_files, converted_files }
+- AutoStats { wallpaper: WallpaperStats, pkg: PkgStats, tex: TexStats }
+- StatusCode = Success | Warning | Error
+- OperationResult<T> { status, message, data: Option<T> }
 
-## 3. 算法详细解析
+## API 库（C FFI / 动态库）
 
-本节将分步骤详细拆解 `.pkg` 解包和 `.tex` 转换的核心逻辑。
+入口位于 api::ffi，全部接受 UTF-8 JSON 配置字符串（Config 结构），返回 `char*` 指向的 JSON（需由调用方调用 lianpkg_free_string 释放）：
+- lianpkg_run_wallpaper(config_json: *const c_char) -> *mut c_char
+- lianpkg_run_pkg(config_json: *const c_char) -> *mut c_char
+- lianpkg_run_tex(config_json: *const c_char) -> *mut c_char
+- lianpkg_run_auto(config_json: *const c_char) -> *mut c_char
+- lianpkg_free_string(s: *mut c_char)
 
-### 3.1. PKG 解包算法 (`src/unpacker/mod.rs`)
+返回 JSON 格式：OperationResult<T>，其中 T 为对应 Stats 结构；序列化失败时返回 `{"status":"Error","message":"JSON serialization failed","data":null}`。
 
-`.pkg` 文件本质上是一个简单的“文件系统镜像”，它将多个文件线性拼接在一起。
+## CLI 库（命令行接口）
 
-#### 步骤 1: 读取包头信息 (Header Parsing)
-*   **处理对象:** `.pkg` 文件的起始字节。
-*   **执行操作:**
-    1.  读取一个 **字符串** (先读 4字节长度 `L`，再读 `L` 字节的 UTF-8 字符串)。这通常是 `"PKG0"` 或类似的版本标识。
-    2.  读取一个 **32位整数** (`u32`)。这代表包内文件的总数量 (`file_count`)。
-*   **期望输出:** 获得 `file_count` (例如: 128)，知道接下来要循环读取多少次索引。
+命令定义（clap，见 cli::Cli）：
+- 全局参数：
+	- --config <FILE>: 指定配置文件路径（TOML），未提供则按默认位置加载/生成。
+	- -d, --debug: 打开调试输出（带时间戳）。
+- 子命令：
+	- wallpaper [--search PATH] [--raw-out PATH] [--pkg-temp PATH] [--no-raw]
+		- 覆盖对应 Config.wallpaper 字段；no-raw 关闭 raw 拷贝。
+	- pkg [--input PATH] [--output PATH]
+		- 覆盖 pkg_temp_path 与 unpacked_output_path。
+	- tex [--input PATH] [--output PATH]
+		- 覆盖 unpacked_output_path 与 tex.converted_output_path。
+	- auto
 
-#### 步骤 2: 解析文件索引表 (Index Table Parsing)
-*   **处理对象:** 紧接在包头之后的数据块。
-*   **执行操作:**
-    *   开始一个循环，执行 `file_count` 次：
-        1.  **读取文件名:** 读取一个字符串 (长度 + 内容)。例如 `"materials/shizuku.tex"`。
-        2.  **读取偏移量:** 读取 `u32`。这是该文件数据相对于 **数据区起始点** 的偏移。
-        3.  **读取大小:** 读取 `u32`。这是该文件数据的字节长度。
-    *   将这些信息存储在一个列表 `entries` 中。
-*   **期望输出:** 一个包含所有文件元数据的列表 `[(name, offset, size), ...]`。此时我们知道了包里有什么，在哪里，有多大。
+执行流程（cli::run & cli::handlers）：
+- 解析 CLI → 加载/合并配置 → 根据子命令调用 handlers::*。
+- handlers::run_wallpaper / run_pkg / run_tex：打印标题，调用 api::native 对应函数，输出结果或错误。
+- handlers::run_auto：
+	- 预估磁盘占用（paper::estimate_requirements + human_bytes），可提示空间不足并等待确认。
+	- 调用 api::native::run_auto；成功打印汇总，失败时执行 cleanup_temp 并打印错误报告。
+- cli::logger：提供 info/success/error/title/debug 输出，可通过 set_debug 控制格式。
 
-#### 步骤 3: 数据提取与写入 (Data Extraction)
-*   **处理对象:** 索引表之后的剩余所有二进制数据 (Data Block)。
-*   **执行操作:**
-    *   记录当前的文件指针位置为 `data_start`。
-    *   遍历步骤 2 中生成的 `entries` 列表：
-        1.  **定位:** 计算绝对位置 `start = data_start + offset`。
-        2.  **切片:** 从原始数据中截取 `data[start .. start + size]`。
-        3.  **创建路径:** 根据文件名创建对应的文件夹结构 (例如 `mkdir -p materials`)。
-        4.  **写入:** 将截取的数据块原样写入到磁盘上的新文件中。
-*   **期望输出:** 磁盘上生成了一个完整的文件夹结构，包含所有解包后的原始文件 (`.tex`, `.mdl`, `.json` 等)。
+## 核心库（core）结构概览
 
----
+- core::config: Config 结构与加载/合并逻辑，支持用户配置覆盖默认配置，缺失时写入示例配置到用户 config 目录。
+- core::path: 路径工具（默认路径、展开 ~、Steam 路径探测、遍历收集 .pkg/.tex、输出路径生成、项目根探测）。
+- core::paper: 壁纸扫描与复制；统计 raw/pkg 数；可估算磁盘占用。
+- core::pkg: 简单 TEXV/PKG 格式解包，按表写出文件。
+- core::tex: TEX 读取与转换管线（reader 解析 → converter 解压/解码 → 保存 PNG/原始媒体）。
 
-### 3.2. TEX 转换算法 (`src/tex/`)
+## 能力边界速览
 
-`.tex` 文件的处理更为复杂，因为它不仅是容器，还涉及图像解码。
-
-#### 步骤 1: 格式校验与头部读取 (Validation & Header)
-*   **处理对象:** `.tex` 文件的起始 32 字节。
-*   **执行操作:**
-    1.  **校验 Magic 1:** 读取前 16 字节，必须为 `"TEXV0005"`。
-    2.  **校验 Magic 2:** 读取次 16 字节，必须为 `"TEXI0001"`。
-    3.  **读取 Header:** 解析随后的结构体，获取 `format` (格式枚举值), `flags` (标志位), `texture_width`, `texture_height` 等。
-*   **期望输出:** 确认文件有效，并获得图像的基本属性（如宽 1920，高 1080，格式代码 4）。
-
-#### 步骤 2: 图像容器解析 (Image Container Parsing)
-*   **处理对象:** Header 之后的数据。
-*   **执行操作:**
-    1.  **读取 Magic:** 读取 16 字节字符串，如 `"TEXB0003"`。这决定了后续数据的解析版本。
-    2.  **读取 Image Count:** 通常为 1。
-    3.  **读取 Image Format:** (仅特定版本) 读取一个 `i32`，对应 FreeImage 库的格式枚举。
-    4.  **读取 Is Video:** (仅特定版本) 读取布尔值，判断是否为 MP4 视频。
-*   **期望输出:** 获得 `TexImage` 结构，知道这是否是一个视频，或者是一个特定格式的图片。
-
-#### 步骤 3: Mipmap 数据提取与解压 (Mipmap Extraction)
-*   **处理对象:** 图像容器内部的 Mipmap 数据块。
-*   **执行操作:**
-    1.  读取 Mipmap 数量 (通常有多层，我们只取第 0 层，即最高清晰度）。
-    2.  **检查压缩:** 读取 `is_lz4_compressed` 标志。
-    3.  **读取数据:** 读取压缩后的字节数据。
-    4.  **解压 (如果需要):** 如果标志为真，使用 `lz4_flex` 算法将数据解压为原始二进制流。
-*   **期望输出:** 获得了一块 **原始的图像数据块** (`Vec<u8>`)。这块数据可能是 PNG 文件的二进制，也可能是 DXT 压缩的纹理数据。
-
-#### 步骤 4: 智能格式判定 (Format Determination)
-*   **处理对象:** `TexHeader`, `TexImage` 和解压后的数据。
-*   **执行操作:**
-    这是一个优先级判断逻辑：
-    1.  **是视频吗?** 检查 `flags` 的第 5 位或 `is_video_mp4` 字段。如果是，标记为 `VideoMp4`。
-    2.  **是常见图片吗?** 检查 `image_format`。如果是 JPEG, PNG 等，标记为对应格式。
-    3.  **是压缩纹理吗?** 如果以上都不是，回退到 `header.format`。
-        *   0 -> `RGBA8888` (无压缩)
-        *   4 -> `CompressedDXT5` (透明度渐变)
-        *   6 -> `CompressedDXT3` (透明度突变)
-        *   7 -> `CompressedDXT1` (无透明度)
-*   **期望输出:** 确定了数据的 **真实身份** (MipmapFormat)。
-
-#### 步骤 5: 最终解码与转换 (Decoding & Saving)
-*   **处理对象:** 原始图像数据块 + 确定的格式。
-*   **执行操作:**
-    *   **分支 A: 视频/直接图片 (MP4, PNG, JPG)**
-        *   数据本身就是完整的文件。直接将 `Vec<u8>` 写入磁盘，后缀名为 `.mp4`, `.png` 或 `.jpg`。
-    *   **分支 B: GPU 纹理 (DXT1/3/5, RGBA)**
-        *   数据是显卡直接读取的格式，人类不可读。
-        *   **解码:** 使用 `texture2ddecoder` 库，根据宽、高和 DXT 算法，将数据“翻译”成标准的 RGBA 像素数组 (`[R, G, B, A, R, G, B, A, ...]`)。
-        *   **编码:** 使用 `image` 库，将 RGBA 像素数组编码为标准的 PNG 图片并保存。
-*   **期望输出:** 用户最终在文件夹中看到了一张可查看的 `.png` 图片或 `.mp4` 视频。
-
-## 4. 开发者参考
-
-### 核心依赖库
-*   `lz4_flex`: 用于处理 `.tex` 文件中的 LZ4 解压。
-*   `texture2ddecoder`: 用于解码 DXT/BC 系列的压缩纹理格式。
-*   `image`: 用于将原始像素数据编码为 PNG 文件。
-*   `byteorder`: 用于处理二进制数据的大小端读取。
-
-### 目录结构建议
-在 Rust 项目中，技术文档通常放置在：
-*   项目根目录的 `docs/` 文件夹（推荐）。
-*   或者直接写在 `README.md`（如果内容较少）。
-*   代码注释中（使用 `///` 文档注释），可以通过 `cargo doc` 生成 HTML 文档。
-
-对于本项目，建议将此文档保留在 `docs/technical_details.md`，并在 `README.md` 中提供链接。
+- 输入：依赖 Config 中的路径设置；FFI 接口要求 UTF-8 JSON，调用方需负责字符串释放。
+- 处理能力：
+	- 壁纸：复制包含 .pkg 的文件夹到临时目录；非 pkg 壁纸可选择复制。
+	- PKG：按内部索引无压缩解包；目录名重复会自动生成唯一输出路径。
+	- TEX：支持 LZ4 解压；支持 DXT1/3/5、RGBA8888、RG88、R8，或直接保存已有图片/MP4 数据；未知格式返回错误。
+- 清理：auto 模式可选清理 pkg_temp 与解包目录；cleanup_unpacked 目前为占位（防止误删）。
+- 安全：路径不存在、JSON/UTF-8 解析、文件 IO、格式校验均返回字符串错误；FFI 返回结构化 JSON 错误信息。

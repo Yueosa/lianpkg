@@ -1,17 +1,14 @@
 use std::path::Path;
 use std::fs::File;
 use std::io::{self, Write};
-use crate::tex::structs::*;
+use super::structs::*;
 use image::RgbaImage;
 use texture2ddecoder::{decode_bc1, decode_bc2, decode_bc3};
-
-use crate::log;
 
 pub fn convert_and_save(tex_file: &TexFile, output_path: &Path) -> io::Result<()> {
     if let Some(first_image) = tex_file.images.first() {
         if let Some(first_mipmap) = first_image.mipmaps.first() {
             let format = determine_format(tex_file, first_image);
-            log::debug("convert_and_save", "format", &format!("Determined format: {:?}", format));
             
             let mut data = first_mipmap.data.clone();
 
