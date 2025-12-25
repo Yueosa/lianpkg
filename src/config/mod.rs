@@ -96,13 +96,9 @@ pub fn load_config(custom_path: Option<PathBuf>) -> ConfigStatus {
         }
     }
 
-    let default_path = config_dir.join("default.toml");
     let user_path = config_dir.join("config.toml");
 
-    let default_exists = default_path.exists();
-    let user_exists = user_path.exists();
-
-    if !default_exists && !user_exists {
+    if !user_path.exists() {
         let default_config = Config::default();
         
         let commented_config = format!(r#"# === LianPkg Configuration File / LianPkg 配置文件 ===
@@ -167,13 +163,7 @@ clean_unpacked = true
 
     let mut final_config = Config::default();
 
-    if default_exists {
-        if let Err(e) = merge_config_file(&default_path, &mut final_config) {
-            eprintln!("[WARN] {}", e);
-        }
-    }
-
-    if user_exists {
+    if user_path.exists() {
         if let Err(e) = merge_config_file(&user_path, &mut final_config) {
             return ConfigStatus::Error(e);
         }
