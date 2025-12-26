@@ -66,7 +66,7 @@ pub fn default_workshop_path() -> String {
     if let Some(base_path) = get_steam_base_path() {
         // Try to find actual library path from vdf
         if let Some(lib_path) = find_library_path(&base_path) {
-             return lib_path
+            return lib_path
                 .join("steamapps")
                 .join("workshop")
                 .join("content")
