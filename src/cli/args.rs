@@ -12,7 +12,7 @@ use std::path::PathBuf;
     version,
     about = "Steam Wallpaper Engine 壁纸资源提取与转换工具",
     long_about = "LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。\n\
-                  它可以提取壁纸文件、解包 .pkg 文件以及将 .tex 纹理转换为常见的图像格式。"
+                    它可以提取壁纸文件、解包 .pkg 文件以及将 .tex 纹理转换为常见的图像格式。"
 )]
 pub struct Cli {
     /// 配置文件路径

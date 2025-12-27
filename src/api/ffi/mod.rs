@@ -1,0 +1,1 @@
+// 之后需要为 Flutter GUI 开发实现的 FFI 接口
