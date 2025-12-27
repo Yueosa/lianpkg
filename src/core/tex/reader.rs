@@ -1,8 +1,11 @@
+//! TEX 文件二进制读取器（内部使用）
+
 use std::io::{self, Read, Seek};
 use byteorder::{ReadBytesExt, LittleEndian};
-use super::structs::*;
+use crate::core::tex::structs::*;
 
-pub fn read_tex<R: Read + Seek>(mut reader: R) -> io::Result<TexFile> {
+/// 读取 TEX 文件结构
+pub(crate) fn read_tex<R: Read + Seek>(mut reader: R) -> io::Result<TexFile> {
     let magic1 = read_n_string(&mut reader, 16)?;
     if magic1 != "TEXV0005" {
         return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Invalid Magic1: {}", magic1)));

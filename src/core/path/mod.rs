@@ -1,226 +1,62 @@
-use std::path::{Path, PathBuf};
-use std::fs;
-#[cfg(target_os = "windows")]
-use std::env;
+//! path 模块 - 路径处理与解析
+//!
+//! 本模块提供各类路径解析功能：
+//! - 配置文件路径: default_config_dir, default_config_toml_path, default_state_json_path
+//! - Steam/Workshop 路径: default_workshop_path
+//! - 输出路径: default_raw_output_path, default_pkg_temp_path, default_unpacked_output_path
+//! - Pkg 路径: pkg_temp_dest, scene_name_from_pkg_stem
+//! - Tex 路径: resolve_tex_output_dir
+//! - 文件扫描: get_target_files, find_project_root
+//! - 通用工具: ensure_dir, expand_path, get_unique_output_path
 
-pub fn expand_path(path_str: &str) -> PathBuf {
-    if path_str.starts_with("~") {
-        if let Some(home) = dirs::home_dir() {
-            if path_str == "~" {
-                return home;
-            }
-            if path_str.starts_with("~/") {
-                return home.join(&path_str[2..]);
-            }
-        }
-    }
-    PathBuf::from(path_str)
-}
+mod utl;    // 通用工具函数
+mod cfg;    // Config 路径解析
+mod steam;  // Steam/Wallpaper 路径定位
+mod output; // 输出路径解析
+mod pkg;    // Pkg 路径解析
+mod tex;    // Tex 路径解析
+mod scan;   // 文件扫描相关
 
-fn get_steam_base_path() -> Option<PathBuf> {
-    #[cfg(target_os = "windows")]
-    {
-        use winreg::enums::*;
-        use winreg::RegKey;
-        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        hkcu.open_subkey("Software\\Valve\\Steam")
-            .ok()
-            .and_then(|steam| steam.get_value::<String, _>("SteamPath").ok())
-            .map(PathBuf::from)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let p = expand_path("~/.local/share/Steam");
-        if p.exists() { Some(p) } else { None }
-    }
-}
+// ============================================================================
+// 导出通用工具函数
+// ============================================================================
+pub use utl::ensure_dir;
+pub use utl::expand_path;
+pub use utl::get_unique_output_path;
 
-fn find_library_path(steam_base: &Path) -> Option<PathBuf> {
-    let vdf_path = steam_base.join("steamapps").join("libraryfolders.vdf");
-    if !vdf_path.exists() {
-        return None;
-    }
-    
-    let content = fs::read_to_string(&vdf_path).ok()?;
-    let mut current_path = None;
-    
-    for line in content.lines() {
-        let line = line.trim();
-        // Match "path" "..."
-        if line.starts_with("\"path\"") {
-            let parts: Vec<&str> = line.split('"').collect();
-            if parts.len() >= 4 {
-                let p = parts[3].replace("\\\\", "\\");
-                current_path = Some(PathBuf::from(p));
-            }
-        }
-        // Match "431960"
-        if line.contains("\"431960\"") {
-            return current_path;
-        }
-    }
-    None
-}
+// ============================================================================
+// 导出 Config 路径接口
+// ============================================================================
+pub use cfg::default_config_dir;
+pub use cfg::default_config_toml_path;
+pub use cfg::default_state_json_path;
 
-pub fn default_workshop_path() -> String {
-    if let Some(base_path) = get_steam_base_path() {
-        // Try to find actual library path from vdf
-        if let Some(lib_path) = find_library_path(&base_path) {
-            return lib_path
-                .join("steamapps")
-                .join("workshop")
-                .join("content")
-                .join("431960")
-                .to_string_lossy()
-                .to_string();
-        }
-        
-        // Fallback to default steam library
-        return base_path
-            .join("steamapps")
-            .join("workshop")
-            .join("content")
-            .join("431960")
-            .to_string_lossy()
-            .to_string();
-    }
+// ============================================================================
+// 导出 Steam/Workshop 路径接口
+// ============================================================================
+pub use steam::default_workshop_path;
 
-    #[cfg(target_os = "windows")]
-    {
-        r"C:\Program Files (x86)\Steam\steamapps\workshop\content\431960".to_string()
-    }
+// ============================================================================
+// 导出输出路径接口
+// ============================================================================
+pub use output::default_raw_output_path;
+pub use output::default_pkg_temp_path;
+pub use output::default_unpacked_output_path;
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        "~/.local/share/Steam/steamapps/workshop/content/431960".to_string()
-    }
-}
+// ============================================================================
+// 导出 Pkg 路径接口
+// ============================================================================
+pub use pkg::pkg_temp_dest;
+pub use pkg::scene_name_from_pkg_stem;
 
-pub fn default_raw_output_path() -> String {
-    #[cfg(target_os = "windows")]
-    { windows_appdata_path("Wallpapers_Raw") }
-    #[cfg(not(target_os = "windows"))]
-    { "~/.local/share/lianpkg/Wallpapers_Raw".to_string() }
-}
+// ============================================================================
+// 导出 Tex 路径接口
+// ============================================================================
+pub use tex::resolve_tex_output_dir;
 
-pub fn default_pkg_temp_path() -> String {
-    #[cfg(target_os = "windows")]
-    { windows_appdata_path("Pkg_Temp") }
-    #[cfg(not(target_os = "windows"))]
-    { "~/.local/share/lianpkg/Pkg_Temp".to_string() }
-}
+// ============================================================================
+// 导出文件扫描接口
+// ============================================================================
+pub use scan::get_target_files;
+pub use scan::find_project_root;
 
-pub fn default_unpacked_output_path() -> String {
-    #[cfg(target_os = "windows")]
-    { windows_appdata_path("Pkg_Unpacked") }
-    #[cfg(not(target_os = "windows"))]
-    { "~/.local/share/lianpkg/Pkg_Unpacked".to_string() }
-}
-
-#[cfg(target_os = "windows")]
-fn windows_appdata_path(sub: &str) -> String {
-    env::var("APPDATA")
-        .map(|p| PathBuf::from(p).join("lianpkg").join(sub).to_string_lossy().to_string())
-        .unwrap_or_else(|_| format!(".\\{}", sub))
-}
-
-pub fn pkg_temp_dest(dir_name: &str, file_name: &str) -> String {
-    format!("{}_{}", dir_name, file_name)
-}
-
-pub fn scene_name_from_pkg_stem(stem: &str) -> String {
-    if let Some((prefix, _)) = stem.split_once('_') {
-        prefix.to_string()
-    } else {
-        stem.to_string()
-    }
-}
-
-pub fn resolve_tex_output_dir(
-    converted_output_path: Option<&str>,
-    scene_root: &Path,
-    input_file: Option<&Path>,
-    relative_base: Option<&Path>,
-) -> PathBuf {
-    let base_dir = if let Some(custom_path) = converted_output_path {
-        expand_path(custom_path)
-            .join("tex_converted")
-            .join(scene_root.file_name().unwrap_or_default())
-    } else {
-        scene_root.join("tex_converted")
-    };
-
-    if let (Some(file), Some(base)) = (input_file, relative_base) {
-        if let Ok(relative) = file.strip_prefix(base) {
-            if let Some(parent) = relative.parent() {
-                return base_dir.join(parent);
-            }
-        }
-    } 
-    base_dir
-}
-
-pub fn get_target_files(path: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-
-    if path.is_file() {
-        files.push(path.to_path_buf());
-    } else if path.is_dir() {
-        visit_dirs(path, &mut files);
-    }
-    files
-}
-
-fn visit_dirs(dir: &Path, files: &mut Vec<PathBuf>) {
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                visit_dirs(&path, files);
-            } else if let Some(ext) = path.extension() {
-                let ext_str = ext.to_string_lossy().to_lowercase();
-                if ext_str == "pkg" || ext_str == "tex" {
-                    files.push(path);
-                }
-            }
-        }
-    }
-}
-
-pub fn find_project_root(path: &Path) -> Option<PathBuf> {
-    let mut current = path.parent();
-    while let Some(p) = current {
-        if p.join("project.json").exists() || p.join("scene.json").exists() {
-            return Some(p.to_path_buf());
-        }
-        
-        if p.join("materials").is_dir() {
-            if path.starts_with(p.join("materials")) {
-                return Some(p.to_path_buf());
-            }
-        }
-
-        if p.parent().is_none() {
-            break;
-        }
-        current = p.parent();
-    }
-    None
-}
-
-pub fn get_unique_output_path(base: &Path, name: &str) -> PathBuf {
-    let mut target = base.join(name);
-    if !target.exists() {
-        return target;
-    }
-
-    let mut i = 1;
-    loop {
-        let new_name = format!("{}-{}", name, i);
-        target = base.join(&new_name);
-        if !target.exists() {
-            return target;
-        }
-        i += 1;
-    }
-}

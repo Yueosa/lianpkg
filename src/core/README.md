@@ -1,47 +1,171 @@
 # core 模块概览
 
-## path
-- 模块：`path`
-- 模块简述：处理路径展开（含 `~`/环境变量）、提供配置/输出目录默认路径。
-- 主要接口：
-  - `expand_path(input: &str) -> PathBuf`：展开 `~`/环境变量，得到绝对路径。
-  - `get_default_config_path() -> PathBuf`：返回配置文件默认路径。
-  - `get_default_tex_output_path() -> PathBuf`：返回 TEX 输出目录默认路径。
+本模块包含 LianPkg 的所有核心功能实现，采用统一的 **Input/Output 结构体** 设计模式。
 
-## config
-- 模块：`config`
-- 模块简述：管理 TOML 配置和 state.json（处理进度标记）。
-- 配置接口：
-  - `create_config_file(path: &Path) -> Result<(), String>`：写入默认模板，若已有文件则覆盖。
-  - `load_config(path: &Path) -> Result<Config, String>`：读取并解析配置为结构体。
-  - `update_config(path: &Path, new_cfg: &ConfigRaw) -> Result<Config, String>`：按增量合并写回，并返回合并后的配置。
-  - `delete_config_file(path: &Path) -> Result<(), String>`：删除单个配置文件。
-  - `delete_config_dir(path: &Path) -> Result<(), String>`：删除包含配置的目录。
-- 状态接口：
-  - `load_state(path: &Path) -> Result<State, String>`：读取 state.json 为 State。
-  - `save_state(path: &Path, state: &State) -> Result<(), String>`：写入 state.json。
-  - `delete_state(path: &Path) -> Result<(), String>`：删除 state.json。
-  - `mark_processed(path: &Path, flag: bool) -> Result<State, String>`：设置 processed 标记并落盘。
-  - `clear_state(path: &Path) -> Result<State, String>`：清空 processed 标记并落盘。
+## 模块结构
 
-## paper
-- 模块：`paper`
-- 模块简述：遍历和处理壁纸项目，读取元信息并输出处理结果/估算。
-- 主要接口：
-  - `list_workshop_dirs(base: &Path) -> Result<Vec<PathBuf>, String>`：列出 base 下符合规则的壁纸项目目录。
-  - `read_project_meta(dir: &Path) -> Result<ProjectMeta, String>`：读取单个项目的 metadata 信息。
-  - `process_folder(dir: &Path, output: &Path) -> Result<WallpaperStats, String>`：处理单个目录并返回统计数据。
-  - `extract_wallpapers(base: &Path, output: &Path) -> Result<WallpaperStats, String>`：遍历多个目录逐个处理并汇总统计。
-  - `estimate_requirements(dirs: &[PathBuf]) -> Result<FolderProcess, String>`：估算给定目录集合的空间/工作量需求。
+```
+src/core/
+├── mod.rs      # 模块入口
+├── path/       # 路径处理与解析
+├── cfg/        # 配置文件与状态文件操作
+├── paper/      # Wallpaper 壁纸扫描与复制
+├── pkg/        # Pkg 文件解析与解包
+└── tex/        # Tex 文件解析与转换
+```
 
-## pkg
-- 模块：`pkg`
-- 模块简述：解包单个 `.pkg` 文件。
-- 主要接口：
-  - `unpack_pkg(file_path: &Path, output_base: &Path) -> Result<usize, String>`：解析条目表并写出每个文件，返回成功数量。
+---
 
-## tex
-- 模块：`tex`
-- 模块简述：解析并转存单个 TEX 文件。
-- 主要接口：
-  - `process_tex(input_path: &Path, output_path: &Path) -> Result<(), String>`：读 TEX、解码或直存，输出图片/视频/PNG。
+## path - 路径处理与解析
+
+**文件结构**: `utl.rs`, `cfg.rs`, `steam.rs`, `output.rs`, `pkg.rs`, `tex.rs`, `scan.rs`
+
+### 导出接口
+
+| 分类     | 接口                           | 说明                                   |
+| -------- | ------------------------------ | -------------------------------------- |
+| 通用工具 | `ensure_dir`                   | 确保目录存在                           |
+| 通用工具 | `expand_path`                  | 展开 `~` 路径                          |
+| 通用工具 | `get_unique_output_path`       | 获取唯一输出路径                       |
+| Config   | `default_config_dir`           | 默认配置目录                           |
+| Config   | `default_config_toml_path`     | config.toml 路径                       |
+| Config   | `default_state_json_path`      | state.json 路径                        |
+| Steam    | `default_workshop_path`        | Workshop 路径（支持原生/Flatpak/Snap） |
+| Output   | `default_raw_output_path`      | 原始壁纸输出路径                       |
+| Output   | `default_pkg_temp_path`        | Pkg 临时路径                           |
+| Output   | `default_unpacked_output_path` | 解包输出路径                           |
+| Pkg      | `pkg_temp_dest`                | Pkg 临时目标名                         |
+| Pkg      | `scene_name_from_pkg_stem`     | 从文件名提取场景名                     |
+| Tex      | `resolve_tex_output_dir`       | Tex 输出目录解析                       |
+| Scan     | `get_target_files`             | 获取目标文件列表                       |
+| Scan     | `find_project_root`            | 查找项目根目录                         |
+
+---
+
+## cfg - 配置文件与状态文件操作
+
+**文件结构**: `structs.rs`, `utl.rs`, `config.rs`, `state.rs`, `clear.rs`
+
+### 导出接口
+
+| 接口                 | Input               | Output               | 说明         |
+| -------------------- | ------------------- | -------------------- | ------------ |
+| `create_config_toml` | `CreateConfigInput` | `CreateConfigOutput` | 创建配置文件 |
+| `read_config_toml`   | `ReadConfigInput`   | `ReadConfigOutput`   | 读取配置文件 |
+| `update_config_toml` | `UpdateConfigInput` | `UpdateConfigOutput` | 更新配置项   |
+| `delete_config_toml` | `DeleteConfigInput` | `DeleteConfigOutput` | 删除配置文件 |
+| `create_state_json`  | `CreateStateInput`  | `CreateStateOutput`  | 创建状态文件 |
+| `read_state_json`    | `ReadStateInput`    | `ReadStateOutput`    | 读取状态文件 |
+| `write_state_json`   | `WriteStateInput`   | `WriteStateOutput`   | 覆写状态文件 |
+| `delete_state_json`  | `DeleteStateInput`  | `DeleteStateOutput`  | 删除状态文件 |
+| `clear_lianpkg`      | `ClearInput`        | `ClearOutput`        | 递归删除目录 |
+
+---
+
+## paper - Wallpaper 壁纸扫描与复制
+
+**文件结构**: `structs.rs`, `scan.rs`, `copy.rs`, `utl.rs`
+
+### 导出接口
+
+| 接口             | Input                | Output                | 说明              |
+| ---------------- | -------------------- | --------------------- | ----------------- |
+| `list_dirs`      | `ListDirsInput`      | `ListDirsOutput`      | 列出目录          |
+| `read_meta`      | `ReadMetaInput`      | `ReadMetaOutput`      | 读取 project.json |
+| `check_pkg`      | `CheckPkgInput`      | `CheckPkgOutput`      | 检查是否含 pkg    |
+| `estimate`       | `EstimateInput`      | `EstimateOutput`      | 估算空间需求      |
+| `process_folder` | `ProcessFolderInput` | `ProcessFolderOutput` | 处理单个文件夹    |
+| `extract_all`    | `ExtractInput`       | `ExtractOutput`       | 批量提取          |
+
+### 运行时结构体
+
+- `PaperConfig` - 模块运行配置
+- `ProjectMeta` - project.json 元数据
+- `WallpaperStats` - 壁纸统计信息
+- `ProcessedFolder` - 处理结果详情
+- `ProcessResultType` - 处理结果类型枚举
+
+---
+
+## pkg - Pkg 文件解析与解包
+
+**文件结构**: `structs.rs`, `parse.rs`, `unpack.rs`, `utl.rs`
+
+### 导出接口
+
+| 接口           | Input              | Output              | 说明                 |
+| -------------- | ------------------ | ------------------- | -------------------- |
+| `parse_pkg`    | `ParsePkgInput`    | `ParsePkgOutput`    | 解析元数据（不写入） |
+| `unpack_pkg`   | `UnpackPkgInput`   | `UnpackPkgOutput`   | 解析并解包           |
+| `unpack_entry` | `UnpackEntryInput` | `UnpackEntryOutput` | 解包单个条目         |
+
+### 运行时结构体
+
+- `PkgInfo` - Pkg 文件信息
+- `PkgEntry` - 文件条目
+- `ExtractedFile` - 解包后的文件信息
+
+---
+
+## tex - Tex 文件解析与转换
+
+**文件结构**: `structs.rs`, `parse.rs`, `convert.rs`, `reader.rs`, `decoder.rs`
+
+### 导出接口
+
+| 接口          | Input             | Output             | 说明                 |
+| ------------- | ----------------- | ------------------ | -------------------- |
+| `parse_tex`   | `ParseTexInput`   | `ParseTexOutput`   | 解析元数据（不转换） |
+| `convert_tex` | `ConvertTexInput` | `ConvertTexOutput` | 解析并转换保存       |
+
+### 运行时结构体
+
+- `TexInfo` - Tex 文件信息
+- `ConvertedFile` - 转换后的文件信息
+- `MipmapFormat` - 格式枚举
+
+### 支持的格式
+
+- **压缩格式**: DXT1, DXT3, DXT5
+- **原始格式**: RGBA8888, RG88, R8
+- **图片格式**: PNG, JPEG, BMP, GIF 等
+- **视频格式**: MP4
+
+---
+
+## 使用模式
+
+所有模块都支持两种使用模式：
+
+### 1. 单独使用
+
+```rust
+// 一键提取壁纸
+let result = paper::extract_all(ExtractInput { config });
+
+// 一键解包 pkg
+let result = pkg::unpack_pkg(UnpackPkgInput { file_path, output_base });
+
+// 一键转换 tex
+let result = tex::convert_tex(ConvertTexInput { file_path, output_path });
+```
+
+### 2. 复合流程
+
+```rust
+// 精细控制：扫描 → 检查 → 处理
+let dirs = paper::list_dirs(ListDirsInput { path });
+for dir in dirs.dirs {
+    let check = paper::check_pkg(CheckPkgInput { folder: dir.into() });
+    if check.has_pkg {
+        // 走 pkg 解包流程
+        let unpack_result = pkg::unpack_pkg(...);
+        // 转换 tex 文件
+        for file in unpack_result.extracted_files {
+            if file.entry_name.ends_with(".tex") {
+                tex::convert_tex(...);
+            }
+        }
+    }
+}
+```

@@ -1,7 +1,10 @@
+//! 内部工具函数（不对外导出）
+
 use std::fs;
 use std::path::Path;
 
-pub fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+/// 递归复制目录
+pub(crate) fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     if !dst.exists() {
         fs::create_dir_all(dst)?;
     }
@@ -20,35 +23,18 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn get_dir_size(path: &Path) -> u64 {
+/// 递归计算目录大小
+pub(crate) fn get_dir_size(path: &Path) -> u64 {
     let mut size = 0;
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.flatten() {
             let p = entry.path();
             if p.is_dir() {
                 size += get_dir_size(&p);
-            } else {
-                if let Ok(meta) = fs::metadata(&p) {
-                    size += meta.len();
-                }
+            } else if let Ok(meta) = fs::metadata(&p) {
+                size += meta.len();
             }
         }
     }
     size
-}
-
-pub fn check_has_pkg(path: &Path) -> bool {
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() {
-                if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-                    if ext.eq_ignore_ascii_case("pkg") {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    false
 }
