@@ -4,19 +4,34 @@ use std::path::Path;
 use std::fs;
 use crate::core::path;
 
+/// 转义路径字符串用于 TOML（Windows 反斜杠需要转义）
+fn escape_path_for_toml(path: &str) -> String {
+    path.replace('\\', "\\\\")
+}
+
 /// 生成 config.toml 的默认模板内容
 /// 使用 core/path 模块获取平台相关的默认路径
 pub fn default_config_template() -> String {
-    let wp = path::default_workshop_path();
-    let raw_out = path::default_raw_output_path();
-    let pkg_temp = path::default_pkg_temp_path();
+    let wp = escape_path_for_toml(&path::default_workshop_path());
+    let raw_out = escape_path_for_toml(&path::default_raw_output_path());
+    let pkg_temp = escape_path_for_toml(&path::default_pkg_temp_path());
     let enable_raw = true;
-    let unpack_out = path::default_unpacked_output_path();
+    let unpack_out = escape_path_for_toml(&path::default_unpacked_output_path());
     let clean_pkg_temp = true;
     let clean_unpacked = true;
     let converted_hint = String::new();
 
     format!(r#"# === LianPkg Configuration File / LianPkg 配置文件 ===
+#
+# 路径格式说明 / Path Format:
+#   - 在此配置文件中，Windows 路径的反斜杠需要转义: C:\\Users\\Name\\...
+#   - 或者使用正斜杠（推荐）: C:/Users/Name/...
+#   - 命令行参数 (--search, --output 等) 可直接使用标准格式: C:\Users\Name\...
+#
+# Path format notes:
+#   - In this config file, Windows backslashes must be escaped: C:\\Users\\Name\\...
+#   - Or use forward slashes (recommended): C:/Users/Name/...
+#   - CLI arguments (--search, --output, etc.) accept standard format: C:\Users\Name\...
 
 [wallpaper]
 # === Steam Workshop 壁纸下载路径 ===
