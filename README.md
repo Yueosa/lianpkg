@@ -2,8 +2,6 @@
 
 LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它可以提取壁纸文件、解包 `.pkg` 文件以及将 `.tex` 纹理转换为常见的图像格式，支持 Linux 与 Windows。
 
-##### 项目重构中! 请不要视图使用分支 `main`, 最后一个稳定版本是 `Tag v0.3.2`
-
 ---
 
 ## 使用前须知 ⚠️
@@ -55,7 +53,7 @@ cargo build --release
 | 平台    | 配置路径                        |
 | ------- | ------------------------------- |
 | Linux   | `~/.config/lianpkg/config.toml` |
-| Windows | 与 exe 同目录（便携化）         |
+| Windows | `%APPDATA%\lianpkg\config.toml` |
 
 配置优先级：**命令行参数** > `config.toml` > **默认值**
 
@@ -70,13 +68,15 @@ lianpkg auto
 # 先预览将执行的操作
 lianpkg auto --dry-run
 
-# 增量处理（跳过已处理的壁纸）
+# 增量处理（跳过之前已处理的壁纸）
 lianpkg auto --incremental
 ```
 
 ---
 
 ## 命令参考 📖
+
+> 此部分面向高级用户
 
 ```
 lianpkg [OPTIONS] <COMMAND>
