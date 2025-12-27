@@ -27,6 +27,7 @@ fn get_indent_str() -> String {
     "  ".repeat(level)
 }
 
+#[allow(dead_code)]
 pub fn title(msg: &str) {
     if !is_debug() {
         println!("\n=== {} ===", msg);
@@ -36,6 +37,7 @@ pub fn title(msg: &str) {
     }
 }
 
+#[allow(dead_code)]
 pub fn info(msg: &str) {
     let indent = get_indent_str();
     if !is_debug() {
@@ -46,6 +48,7 @@ pub fn info(msg: &str) {
     }
 }
 
+#[allow(dead_code)]
 pub fn success(msg: &str) {
     let indent = get_indent_str();
     if !is_debug() {
@@ -56,6 +59,7 @@ pub fn success(msg: &str) {
     }
 }
 
+#[allow(dead_code)]
 pub fn error(msg: &str) {
     let indent = get_indent_str();
     if !is_debug() {

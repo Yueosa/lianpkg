@@ -81,6 +81,65 @@ pub struct DeleteConfigOutput {
 // State.json 相关结构体
 // ============================================================================
 
+/// State.json 完整结构（用于序列化/反序列化）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StateData {
+    /// 已处理的壁纸列表
+    #[serde(default)]
+    pub processed_wallpapers: Vec<ProcessedWallpaper>,
+    /// 上次运行时间（Unix 时间戳）
+    #[serde(default)]
+    pub last_run: Option<u64>,
+    /// 统计信息
+    #[serde(default)]
+    pub statistics: StateStatistics,
+}
+
+/// 已处理的壁纸记录
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessedWallpaper {
+    /// 壁纸 ID（通常是文件夹名，即 workshop id）
+    pub wallpaper_id: String,
+    /// 壁纸标题（从 project.json 读取）
+    pub title: Option<String>,
+    /// 处理类型
+    pub process_type: WallpaperProcessType,
+    /// 处理时间（Unix 时间戳）
+    pub processed_at: u64,
+    /// 输出路径
+    pub output_path: Option<String>,
+}
+
+/// 壁纸处理类型
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum WallpaperProcessType {
+    /// 原始壁纸（直接复制）
+    Raw,
+    /// Pkg 壁纸（已解包）
+    Pkg,
+    /// Pkg + Tex 壁纸（已解包并转换）
+    PkgTex,
+    /// 跳过（不符合条件）
+    Skipped,
+}
+
+/// 统计信息
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StateStatistics {
+    /// 总处理次数
+    #[serde(default)]
+    pub total_runs: u64,
+    /// 总处理壁纸数
+    #[serde(default)]
+    pub total_wallpapers: u64,
+    /// 总 pkg 处理数
+    #[serde(default)]
+    pub total_pkgs: u64,
+    /// 总 tex 转换数
+    #[serde(default)]
+    pub total_texs: u64,
+}
+
 /// create_state_json 接口入参
 #[derive(Debug, Clone)]
 pub struct CreateStateInput {

@@ -6,49 +6,44 @@ LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它
 
 ---
 
-## 使用前须知（重要）⚠️
+## 使用前须知 ⚠️
 
-###### 推荐先执行一次 `lianpkg auto --dry-run` 核对实际路径
+> 推荐先执行一次 `lianpkg auto --dry-run` 核对实际路径
 
-由于 LianPkg 的工作对象是 Steam Workshop 中的 Wallpaper Engine 壁纸资源，默认处理目录(硬编码)为：
+LianPkg 的工作对象是 Steam Workshop 中的 Wallpaper Engine 壁纸资源，默认处理目录为：
 
-```swift
-~/.local/share/Steam/steamapps/workshop/content/431960
-```
+- **Linux**: `~/.local/share/Steam/steamapps/workshop/content/431960`
+- **Windows**: 自动扫描 `libraryfolders.vdf` 定位
 
-工作环境下, 程序会自动扫描 `libraryfolders.vdf`，即使你的 Wallpaper Engine 安装在非默认的 Steam 库（如 D 盘、E 盘），程序也能自动定位到正确的壁纸路径，无需手动配置！
+程序会自动扫描 Steam 库配置文件，即使你的 Wallpaper Engine 安装在非默认的 Steam 库，程序也能自动定位到正确的壁纸路径。
 
-因此，在使用本工具之前，请确保你的机器上 已经安装并至少运行过一次来自 Steam 官方的 Wallpaper Engine，并且已经通过 Steam 下载过壁纸内容。
+**前提条件**：
+- 已安装并运行过 Steam 官方的 Wallpaper Engine
+- 已通过 Steam 订阅并下载过壁纸
 
-如果本地不存在上述目录或目录为空，LianPkg 将无法找到任何可处理的壁纸资源 🐾
-
-> 其实你也可以自行下载 `.pkg` 文件，并修改程序的处理路径，但本程序推荐您在官方 Wallpaper Engine 获取安全的壁纸文件
+---
 
 ## 安装 📦
 
-#### 大部分 `Windows` `Linux`
+### 下载预编译版本
 
-你可以直接在 Releases 页面下载编译好的二进制文件使用（提供 Linux 与 Windows 版本）。
+在 [Releases](https://github.com/YourRepo/lianpkg/releases) 页面下载对应平台的二进制文件。
 
-或者，如果你想自己编译，请确保你已经安装了 Rust 和 Cargo：
+### Arch Linux (AUR)
 
 ```bash
-cargo build --release
+yay -S lianpkg-bin
+# 或
+paru -S lianpkg-bin
 ```
 
-编译后的二进制文件位于 `target/release/lianpkg`。
+### 从源码编译
 
-#### `ArchLinux`
-
-除了直接下载二进制文件, 下载源码编译之外
-
-你还可以通过AUR安装 [lianpkg-bin](https://aur.archlinux.org/packages/lianpkg-bin)
-
-```shell
-yay -S lianpkg-bin
-
-#或使用paru
-paru -S lianpkg-bin
+```bash
+git clone https://github.com/YourRepo/lianpkg.git
+cd lianpkg
+cargo build --release
+# 二进制文件位于 target/release/lianpkg
 ```
 
 ---
@@ -56,145 +51,301 @@ paru -S lianpkg-bin
 ## 配置 🛠️
 
 首次运行时，LianPkg 会生成默认配置文件：
-- Linux: `~/.config/lianpkg/config.toml`
-- Windows: 与 exe 同目录（便携化；可用 `--config` 指定其他路径）
 
-程序的配置优先级如下：
-1. **命令行参数**
-2. `config.toml`
-3. **硬编码默认值**
+| 平台    | 配置路径                        |
+| ------- | ------------------------------- |
+| Linux   | `~/.config/lianpkg/config.toml` |
+| Windows | 与 exe 同目录（便携化）         |
+
+配置优先级：**命令行参数** > `config.toml` > **默认值**
 
 ---
 
-## 使用说明 🚀
+## 快速开始 🚀
 
 ```bash
+# 一键处理所有壁纸（推荐）
+lianpkg auto
+
+# 先预览将执行的操作
+lianpkg auto --dry-run
+
+# 增量处理（跳过已处理的壁纸）
+lianpkg auto --incremental
+```
+
+---
+
+## 命令参考 📖
+
+```
 lianpkg [OPTIONS] <COMMAND>
 ```
 
-### 全局选项 🌍
+### 全局选项
 
-以下选项适用于所有模式，且必须位于子命令之前：
+| 选项                  | 说明                   |
+| --------------------- | ---------------------- |
+| `-c, --config <FILE>` | 指定配置文件路径       |
+| `-d, --debug`         | 启用调试日志           |
+| `-q, --quiet`         | 静默模式（只输出结果） |
+| `-h, --help`          | 显示帮助信息           |
+| `-V, --version`       | 显示版本信息           |
 
-- `-c, --config <FILE>`：指定配置文件路径（默认使用自动生成的配置）
-- `-d, --debug`：启用调试日志输出
-- `-h, --help`：打印帮助信息
-- `-V, --version`：打印版本信息
+### 命令列表
 
-### 模式与参数 🧭
+| 命令        | 别名 | 说明           |
+| ----------- | ---- | -------------- |
+| `wallpaper` | `w`  | 壁纸扫描与复制 |
+| `pkg`       | `p`  | PKG 文件解包   |
+| `tex`       | `t`  | TEX 文件转换   |
+| `auto`      | `a`  | 全自动流水线   |
+| `config`    | `c`  | 配置管理       |
+| `status`    | `s`  | 状态查看       |
 
-#### 1. `wallpaper` — 提取壁纸 🖼️
+---
+
+### `wallpaper` — 壁纸扫描与复制 🖼️
 
 扫描 Steam Workshop 目录，将壁纸分类提取。
 
 ```bash
-lianpkg wallpaper [OPTIONS] [SEARCH] [RAW_OUT] [PKG_TEMP]
+lianpkg wallpaper [OPTIONS] [PATH]
 ```
 
-**参数：**
-- `[SEARCH]` / `--search <PATH>`  
-  壁纸源目录（Steam Workshop 路径）。
-- `[RAW_OUT]` / `--raw-out <PATH>`  
-  无需解包的壁纸（如视频、网页）输出目录。
-- `[PKG_TEMP]` / `--pkg-temp <PATH>`  
-  `.pkg` 文件临时存放目录。
+**参数**：
+- `[PATH]` — 壁纸源目录（默认从配置读取）
 
-**选项：**
-- `--no-raw`：仅提取 `.pkg` 文件，跳过普通壁纸的复制。
+**选项**：
+| 选项                | 说明                             |
+| ------------------- | -------------------------------- |
+| `--raw-out <PATH>`  | 原始壁纸输出路径                 |
+| `--pkg-temp <PATH>` | PKG 临时输出路径                 |
+| `--no-raw`          | 跳过原始壁纸复制（只提取 PKG）   |
+| `--ids <IDS>`       | 只处理指定壁纸 ID（逗号分隔）    |
+| `--preview`         | 预览模式（列出壁纸，不执行复制） |
+| `-V, --verbose`     | 详细预览（显示完整元数据）       |
 
-#### 2. `pkg` — 解包 `.pkg` 📦
+**示例**：
+```bash
+# 预览所有壁纸
+lianpkg wallpaper --preview
+
+# 只提取特定壁纸
+lianpkg wallpaper --ids 123456789,987654321
+
+# 自定义输出路径
+lianpkg wallpaper --raw-out ~/wallpapers/raw --pkg-temp ~/wallpapers/pkg
+```
+
+---
+
+### `pkg` — PKG 文件解包 📦
 
 将 `.pkg` 文件解包为原始资源（纹理、JSON 等）。
 
 ```bash
-lianpkg pkg [OPTIONS] [INPUT] [OUTPUT]
+lianpkg pkg [OPTIONS] [PATH]
 ```
 
-**参数：**
-- `[INPUT]` / `--input <PATH>`  
-  输入路径，可以是单个 `.pkg` 文件或包含 `.pkg` 的目录。
-- `[OUTPUT]` / `--output <PATH>`  
-  解包产物的输出目录。
+**参数**：
+- `[PATH]` — 输入路径（.pkg 文件、壁纸目录或 Pkg_Temp 目录）
 
-#### 3. `tex` — 转换 `.tex` 🧩
+**选项**：
+| 选项                  | 说明                              |
+| --------------------- | --------------------------------- |
+| `-o, --output <PATH>` | 解包输出路径                      |
+| `--preview`           | 预览模式（显示 PKG 内容，不解包） |
+| `-V, --verbose`       | 详细预览                          |
+
+**示例**：
+```bash
+# 解包单个 PKG 文件
+lianpkg pkg ./scene.pkg -o ./output
+
+# 预览 PKG 内容
+lianpkg pkg ./scene.pkg --preview -V
+
+# 批量解包目录
+lianpkg pkg ~/wallpapers/pkg_temp
+```
+
+---
+
+### `tex` — TEX 文件转换 🧩
 
 将 `.tex` 纹理文件转换为 PNG/图像格式。
 
 ```bash
-lianpkg tex [OPTIONS] [INPUT]
+lianpkg tex [OPTIONS] [PATH]
 ```
 
-**参数：**
-- `[INPUT]` / `--input <PATH>`  
-  输入路径，可以是单个 `.tex` 文件或包含 `.tex` 的目录。
+**参数**：
+- `[PATH]` — 输入路径（.tex 文件或包含 .tex 的目录）
 
-**选项：**
-- `--output <PATH>`  
-  转换后的图片输出目录。如果不指定，默认在源文件同级生成 `tex_converted` 目录。
+**选项**：
+| 选项                  | 说明                                                      |
+| --------------------- | --------------------------------------------------------- |
+| `-o, --output <PATH>` | 转换输出路径（默认在源文件同级生成 `tex_converted` 目录） |
+| `--preview`           | 预览模式（显示 TEX 格式信息，不转换）                     |
+| `-V, --verbose`       | 详细预览                                                  |
 
-#### 4. `auto` — 一键全自动模式 🤖
+**示例**：
+```bash
+# 转换单个 TEX 文件
+lianpkg tex ./texture.tex
 
-按顺序执行：提取壁纸 -> 解包 PKG -> 转换纹理。
+# 预览 TEX 格式信息
+lianpkg tex ./texture.tex --preview -V
+
+# 批量转换目录
+lianpkg tex ~/wallpapers/unpacked -o ~/wallpapers/images
+```
+
+---
+
+### `auto` — 全自动流水线 🤖
+
+按顺序执行：**提取壁纸** → **解包 PKG** → **转换 TEX**
 
 ```bash
 lianpkg auto [OPTIONS]
 ```
 
-**路径覆盖选项：**
-- `--search <PATH>`：壁纸源目录
-- `--raw-out <PATH>`：原始壁纸输出目录
-- `--pkg-temp <PATH>`： PKG 临时目录
-- `--unpacked-out <PATH>` (或 `--input`)：解包中间产物目录
-- `--tex-out <PATH>`：最终图片输出目录
+**路径选项**：
+| 选项                    | 说明             |
+| ----------------------- | ---------------- |
+| `--search <PATH>`       | 壁纸源目录       |
+| `--raw-out <PATH>`      | 原始壁纸输出目录 |
+| `--pkg-temp <PATH>`     | PKG 临时目录     |
+| `--unpacked-out <PATH>` | 解包输出目录     |
+| `--tex-out <PATH>`      | TEX 转换输出目录 |
 
-**行为控制选项：**
-- `--no-raw`：跳过原始壁纸提取
-- `--no-clean-temp`：流程结束后保留 `Pkg_Temp` 目录
-- `--no-clean-unpacked`：流程结束后保留 `Pkg_Unpacked` 目录（中间产物）
-- `--dry-run`：仅打印将要使用的路径和配置，不执行实际操作
+**行为选项**：
+| 选项                  | 说明                          |
+| --------------------- | ----------------------------- |
+| `--no-raw`            | 跳过原始壁纸提取              |
+| `--no-pkg`            | 跳过 PKG 解包                 |
+| `--no-tex`            | 跳过 TEX 转换                 |
+| `--no-clean-temp`     | 保留 PKG 临时目录             |
+| `--no-clean-unpacked` | 保留解包中间产物              |
+| `--incremental`       | 增量处理（跳过已处理的壁纸）  |
+| `--ids <IDS>`         | 只处理指定壁纸 ID（逗号分隔） |
+| `--dry-run`           | 仅显示计划，不执行            |
 
+**示例**：
+```bash
+# 一键处理所有壁纸
+lianpkg auto
 
-### 磁盘空间预估与检查 💾
+# 预览执行计划
+lianpkg auto --dry-run
 
-在执行 `auto` 模式时，程序会自动：
-1. **预估磁盘占用**：根据扫描到的 PKG 文件大小，预估解包和转换所需的峰值空间。
-2. **检查剩余空间**：如果目标磁盘空间不足，程序会发出警告并暂停，等待用户确认。
-3. **错误保护**：如果执行过程中发生错误，程序会自动清理已生成的临时文件，防止残留垃圾。
+# 增量处理新壁纸
+lianpkg auto --incremental
 
-### 平台差异与运行方式 🖥️
+# 只处理特定壁纸
+lianpkg auto --ids 123456789
 
-- Linux：默认路径基于 `~/.local/share`，命令行运行 `lianpkg ...`。
-- Windows：默认路径基于 exe 同目录（便携化）；可双击运行，流程结束会提示按 Enter 退出；也可在 cmd/PowerShell 运行 `lianpkg.exe ...`。
-
-### 重要提示 📌
-
-- 默认路径可通过 CLI 覆盖或修改 `config.toml`。
-- 清理开关默认开启（保留 `tex_converted`），可用 `--no-clean-temp` / `--no-clean-unpacked` 关闭。
+# 保留中间文件用于调试
+lianpkg auto --no-clean-temp --no-clean-unpacked
+```
 
 ---
 
-## 免责声明 (Disclaimer) 📄
+### `config` — 配置管理 ⚙️
+
+管理 LianPkg 配置文件。
+
+```bash
+lianpkg config <SUBCOMMAND>
+```
+
+**子命令**：
+| 命令                | 说明                    |
+| ------------------- | ----------------------- |
+| `show`              | 显示当前完整配置        |
+| `path`              | 显示配置文件路径        |
+| `get <KEY>`         | 获取指定配置项          |
+| `set <KEY> <VALUE>` | 设置配置项              |
+| `reset [-y]`        | 重置为默认配置          |
+| `edit`              | 用 $EDITOR 打开配置文件 |
+
+**示例**：
+```bash
+# 查看当前配置
+lianpkg config show
+
+# 修改配置项
+lianpkg config set wallpaper.workshop_path "/custom/path"
+
+# 编辑配置文件
+lianpkg config edit
+```
+
+---
+
+### `status` — 状态查看 📊
+
+查看处理状态和统计信息。
+
+```bash
+lianpkg status [OPTIONS]
+```
+
+**选项**：
+| 选项        | 说明                        |
+| ----------- | --------------------------- |
+| `--full`    | 显示完整统计                |
+| `--list`    | 列出所有已处理的壁纸        |
+| `--clear`   | 清除状态记录                |
+| `-y, --yes` | 跳过确认（与 --clear 配合） |
+
+**示例**：
+```bash
+# 查看处理状态
+lianpkg status
+
+# 列出已处理壁纸
+lianpkg status --list
+
+# 清除状态（重新处理）
+lianpkg status --clear -y
+```
+
+---
+
+## 磁盘空间预估 💾
+
+执行 `auto` 模式时，程序会自动：
+
+1. **预估磁盘占用** — 根据 PKG 文件大小估算峰值空间需求
+2. **检查剩余空间** — 空间不足时警告并等待确认
+3. **错误保护** — 发生错误时自动清理临时文件
+
+---
+
+## 免责声明 📄
 
 本工具仅供学习交流和个人备份使用。
 
-1. **版权归属**: 本工具提取和解包的所有资源（包括但不限于图片、视频、脚本等）的版权归原作者或 Wallpaper Engine 所有。请勿将提取的资源用于商业用途或违反原作者许可的用途。
-2. **使用责任**: 用户在使用本工具时应遵守相关法律法规。对于用户使用本工具所产生的任何后果（包括但不限于版权纠纷、数据丢失等），开发者不承担任何责任。
-3. **非官方工具**: 本项目与 Wallpaper Engine 或 Valve (Steam) 没有任何官方关联。
+1. **版权归属**: 本工具提取的所有资源版权归原作者或 Wallpaper Engine 所有。请勿用于商业用途。
+2. **使用责任**: 用户应遵守相关法律法规，开发者不承担任何使用后果责任。
+3. **非官方工具**: 本项目与 Wallpaper Engine 或 Valve (Steam) 无任何官方关联。
 
 ---
 
-## 致谢与参考资料 🙏
+## 致谢 🙏
 
-本项目算法灵感来源于对现有工具的研究，这些工具用于处理 Wallpaper Engine 的资源格式。
+本项目算法灵感来源于对现有工具的研究：
 
-- **RePKG**，作者 notscuffed（MIT 许可证）
+- **[RePKG](https://github.com/notscuffed/repkg)** by notscuffed (MIT License) — PKG 文件结构参考
+- **[we](https://github.com/redpfire/we)** by redpfire (GPL-3.0 License) — 文件格式分析参考
 
-用作理解 `.pkg` 文件结构的参考。
+LianPkg 是完全独立的 Rust 重写版本，未复制任何源代码。
 
-- **we**，作者 redpfire（GPL-3.0 许可证）
+---
 
-用于文件格式分析和解包逻辑。
+## License
 
-本项目未复制任何源代码；LianPkg 是一个完全独立于源代码的 Rust 重写版本。
-
-本项目与 Wallpaper Engine、Valve 或上述工具的作者均无任何关联。
+MIT License

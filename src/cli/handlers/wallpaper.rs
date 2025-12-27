@@ -1,0 +1,141 @@
+//! Wallpaper 模式处理器
+
+use std::path::PathBuf;
+use super::super::args::WallpaperArgs;
+use super::super::output as out;
+use lianpkg::api::native::{self, paper};
+use lianpkg::core::path;
+
+/// 执行 wallpaper 命令
+pub fn run(args: &WallpaperArgs, config_path: Option<PathBuf>) -> Result<(), String> {
+    // 加载配置
+    let init_result = native::init_config(native::InitConfigInput {
+        config_dir: config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf()),
+    });
+
+    let config_result = native::load_config(native::LoadConfigInput {
+        config_path: init_result.config_path.clone(),
+    });
+
+    let config = config_result.config
+        .ok_or("Failed to load config")?;
+
+    // 确定路径
+    let workshop_path = args.path.clone()
+        .unwrap_or_else(|| config.workshop_path.clone());
+
+    let raw_output = args.raw_output.clone()
+        .unwrap_or_else(|| config.raw_output_path.clone());
+
+    let pkg_temp = args.pkg_temp.clone()
+        .unwrap_or_else(|| config.pkg_temp_path.clone());
+
+    let enable_raw = !args.no_raw && config.enable_raw_output;
+
+    // 预览模式
+    if args.preview {
+        return run_preview(&workshop_path, args.verbose);
+    }
+
+    // 执行复制
+    out::title("Wallpaper Extraction");
+    out::path_info("Source", &workshop_path);
+    out::path_info("Raw Output", &raw_output);
+    out::path_info("PKG Temp", &pkg_temp);
+    println!();
+
+    // 确保目录存在
+    let _ = path::ensure_dir(&raw_output);
+    let _ = path::ensure_dir(&pkg_temp);
+
+    let result = paper::copy_wallpapers(paper::CopyWallpapersInput {
+        wallpaper_ids: args.ids.clone(),
+        workshop_path,
+        raw_output_path: raw_output,
+        pkg_temp_path: pkg_temp,
+        enable_raw,
+    });
+
+    if !result.success {
+        return Err(result.error.unwrap_or_else(|| "Unknown error".to_string()));
+    }
+
+    // 输出结果
+    out::subtitle("Results");
+    out::stat("Raw Copied", result.stats.raw_copied);
+    out::stat("PKG Copied", result.stats.pkg_copied);
+    out::stat("Skipped", result.stats.skipped);
+    out::stat("Total PKG Files", result.stats.total_pkg_files);
+    println!();
+
+    out::success("Wallpaper extraction completed!");
+    Ok(())
+}
+
+/// 预览模式
+fn run_preview(workshop_path: &PathBuf, verbose: bool) -> Result<(), String> {
+    out::title("Wallpaper Preview");
+    out::path_info("Workshop", workshop_path);
+    println!();
+
+    let result = paper::scan_wallpapers(paper::ScanWallpapersInput {
+        workshop_path: workshop_path.clone(),
+    });
+
+    if !result.success {
+        return Err(result.error.unwrap_or_else(|| "Failed to scan".to_string()));
+    }
+
+    out::info(&format!(
+        "Found {} wallpapers ({} PKG, {} Raw)",
+        result.stats.total_count,
+        result.stats.pkg_count,
+        result.stats.raw_count
+    ));
+    println!();
+
+    if verbose {
+        // 详细模式：每个壁纸一个 box
+        for wp in &result.wallpapers {
+            out::box_start(&wp.wallpaper_id);
+            out::box_line("Title", wp.title.as_deref().unwrap_or("(untitled)"));
+            out::box_line("Type", wp.wallpaper_type.as_deref().unwrap_or("unknown"));
+            out::box_line("PKG", &out::pkg_badge(wp.has_pkg, Some(wp.pkg_files.len())));
+            if !wp.pkg_files.is_empty() {
+                let pkg_names: Vec<String> = wp.pkg_files.iter()
+                    .map(|p| p.file_name().unwrap_or_default().to_string_lossy().to_string())
+                    .collect();
+                out::box_line("Files", &pkg_names.join(", "));
+            }
+            out::box_end();
+        }
+    } else {
+        // 简洁模式：表格
+        out::table_header(&[
+            ("ID", 12),
+            ("Title", 30),
+            ("Type", 8),
+            ("PKG", 15),
+        ]);
+
+        for wp in &result.wallpapers {
+            let title = wp.title.as_deref().unwrap_or("(untitled)");
+            let wtype = wp.wallpaper_type.as_deref().unwrap_or("-");
+            let pkg_info = if wp.has_pkg {
+                format!("✓ ({} files)", wp.pkg_files.len())
+            } else {
+                "✗".to_string()
+            };
+
+            out::table_row(&[
+                (&wp.wallpaper_id, 12),
+                (title, 30),
+                (wtype, 8),
+                (&pkg_info, 15),
+            ]);
+        }
+    }
+
+    println!();
+    Ok(())
+}

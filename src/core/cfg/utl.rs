@@ -63,6 +63,21 @@ clean_unpacked = {clean_unpacked}
 #     这是最终产物的目录, 可以不配置, 也可以配置到指定路径
 #     如果留空，则默认在解包路径下的 tex_converted 子目录中
 # converted_output_path = "{converted_hint}"
+
+
+[pipeline]
+# === 是否启用增量处理 ===
+#     启用后，已处理过的壁纸将被跳过（根据 state.json 记录判断）
+#     Default/默认: true
+incremental = true
+
+# === 是否在流水线中自动执行 pkg 解包 ===
+#     Default/默认: true
+auto_unpack_pkg = true
+
+# === 是否在流水线中自动执行 tex 转换 ===
+#     Default/默认: true
+auto_convert_tex = true
 "#)
 }
 

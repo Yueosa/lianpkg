@@ -26,6 +26,10 @@ pub use structs::DeleteConfigInput;
 pub use structs::DeleteConfigOutput;
 
 // State.json 相关结构体
+pub use structs::StateData;
+pub use structs::ProcessedWallpaper;
+pub use structs::WallpaperProcessType;
+pub use structs::StateStatistics;
 pub use structs::CreateStateInput;
 pub use structs::CreateStateOutput;
 pub use structs::ReadStateInput;
