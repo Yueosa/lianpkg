@@ -353,19 +353,8 @@ pub fn press_enter_to_exit_with_config(config_path: Option<&Path>) {
     let _ = std::io::stdin().read_line(&mut String::new());
 }
 
-#[cfg(windows)]
-pub fn press_enter_to_exit() {
-    press_enter_to_exit_with_config(None);
-}
-
 #[cfg(not(windows))]
-#[allow(dead_code)]
 pub fn press_enter_to_exit_with_config(_config_path: Option<&Path>) {
-    // Linux/macOS 不需要
-}
-
-#[cfg(not(windows))]
-pub fn press_enter_to_exit() {
     // Linux/macOS 不需要
 }
 

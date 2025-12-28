@@ -71,13 +71,6 @@ pub fn run() {
     }
 
     // Windows 下等待用户确认（显示配置文件路径）
-    #[cfg(target_os = "windows")]
-    {
-        output::press_enter_to_exit_with_config(config_path_for_display.as_deref());
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        output::press_enter_to_exit();
-    }
+    output::press_enter_to_exit_with_config(config_path_for_display.as_deref());
 }
 
