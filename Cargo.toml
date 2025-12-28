@@ -35,3 +35,6 @@ panic = "abort"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+
+[build-dependencies]
+winres = "0.1"
