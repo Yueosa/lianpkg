@@ -467,27 +467,32 @@ fn load_or_create_state(state_path: &PathBuf) -> cfg::StateData {
 /// 
 /// 从 Workshop 源目录复制元数据到 tex_converted 目录
 /// - 源：workshop_path/壁纸ID/project.json
-/// - 目标：Pkg_Unpacked/tex_converted/壁纸ID/project.json
+/// - 目标：Pkg_Unpacked/壁纸ID/tex_converted/project.json
 fn copy_metadata_to_tex_converted(config: &native_cfg::RuntimeConfig) {
     use std::fs;
     
     let workshop_path = &config.workshop_path;
     let unpacked_path = &config.unpacked_output_path;
-    let tex_converted_base = unpacked_path.join("tex_converted");
     
-    // 遍历 tex_converted 目录下的所有壁纸目录
-    if let Ok(entries) = fs::read_dir(&tex_converted_base) {
+    // 遍历 Pkg_Unpacked 目录下的所有壁纸目录
+    if let Ok(entries) = fs::read_dir(unpacked_path) {
         for entry in entries.flatten() {
-            let tex_dest_dir = entry.path();
-            if !tex_dest_dir.is_dir() {
+            let wallpaper_dir = entry.path();
+            if !wallpaper_dir.is_dir() {
                 continue;
             }
             
             // 获取壁纸 ID（目录名）
-            let wallpaper_id = match tex_dest_dir.file_name().and_then(|n| n.to_str()) {
+            let wallpaper_id = match wallpaper_dir.file_name().and_then(|n| n.to_str()) {
                 Some(name) => name.to_string(),
                 None => continue,
             };
+            
+            // 检查是否有 tex_converted 子目录
+            let tex_dest_dir = wallpaper_dir.join("tex_converted");
+            if !tex_dest_dir.exists() {
+                continue;
+            }
             
             // 源壁纸目录（Steam Workshop）
             let source_dir = workshop_path.join(&wallpaper_id);
@@ -526,28 +531,41 @@ fn copy_metadata_to_tex_converted(config: &native_cfg::RuntimeConfig) {
 /// 清理 unpacked 目录（保留 tex_converted）
 /// 
 /// 目录结构：
-/// - 保留：Pkg_Unpacked/tex_converted/
-/// - 删除：Pkg_Unpacked/壁纸ID/ (解包中间产物)
+/// - 保留：Pkg_Unpacked/壁纸ID/tex_converted/
+/// - 删除：Pkg_Unpacked/壁纸ID/ 下除 tex_converted 以外的其他文件和目录
 fn clean_unpacked_dir(unpacked_path: &PathBuf) {
     use std::fs;
     
+    // 遍历所有壁纸目录
     if let Ok(entries) = fs::read_dir(unpacked_path) {
         for entry in entries.flatten() {
-            let path = entry.path();
-            let name = path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
-            
-            // 保留 tex_converted 目录
-            if name == "tex_converted" {
+            let wallpaper_dir = entry.path();
+            if !wallpaper_dir.is_dir() {
+                // 删除根目录下的文件
+                let _ = fs::remove_file(&wallpaper_dir);
                 continue;
             }
             
-            // 删除其他目录（壁纸解包中间产物）
-            if path.is_dir() {
-                let _ = fs::remove_dir_all(&path);
-            } else {
-                let _ = fs::remove_file(&path);
+            // 遍历壁纸目录下的内容
+            if let Ok(sub_entries) = fs::read_dir(&wallpaper_dir) {
+                for sub_entry in sub_entries.flatten() {
+                    let sub_path = sub_entry.path();
+                    let name = sub_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("");
+                    
+                    // 保留 tex_converted 目录
+                    if name == "tex_converted" {
+                        continue;
+                    }
+                    
+                    // 删除其他内容（解包中间产物）
+                    if sub_path.is_dir() {
+                        let _ = fs::remove_dir_all(&sub_path);
+                    } else {
+                        let _ = fs::remove_file(&sub_path);
+                    }
+                }
             }
         }
     }

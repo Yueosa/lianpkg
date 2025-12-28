@@ -19,11 +19,11 @@ pub fn resolve_tex_output_dir(
     input_file: Option<&Path>,
     relative_base: Option<&Path>,
 ) -> PathBuf {
-    // 确定基础输出目录
+    // 确定基础输出目录：Pkg_Unpacked/壁纸ID/tex_converted/
     let base_dir = if let Some(custom_path) = converted_output_path {
         expand_path(custom_path)
-            .join("tex_converted")
             .join(scene_root.file_name().unwrap_or_default())
+            .join("tex_converted")
     } else {
         scene_root.join("tex_converted")
     };
