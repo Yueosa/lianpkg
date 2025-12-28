@@ -1,3 +1,15 @@
+# 构建产物
 /target
+
+# 编译文件
 /build
-build.sh
+build.rs
+
+# 文件目录
+.directory
+
+# 软件图标
+avatar-modified.ico
+resources.rc
+resources.o
+libresources.a
