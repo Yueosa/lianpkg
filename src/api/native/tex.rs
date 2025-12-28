@@ -357,11 +357,25 @@ fn determine_output_path(
         }
         None => {
             // 使用默认的 tex_converted 子目录
+            // 需要找到壁纸的根目录（scene_root）
+            let scene_root = if let Ok(relative) = tex_path.strip_prefix(unpacked_path) {
+                // relative 如: "123456/materials/scene.tex"
+                // 取第一级目录: "123456"
+                if let Some(first_component) = relative.components().next() {
+                    unpacked_path.join(first_component.as_os_str())
+                } else {
+                    unpacked_path.clone()
+                }
+            } else {
+                // 无法确定相对路径，使用 tex 文件的父目录
+                tex_path.parent().unwrap_or(unpacked_path).to_path_buf()
+            };
+            
             let output_dir = path::resolve_tex_output_dir(
                 None,
-                unpacked_path,
+                &scene_root,
                 Some(tex_path.as_path()),
-                Some(unpacked_path.as_path()),
+                Some(&scene_root),
             );
             let _ = path::ensure_dir(&output_dir);
             output_dir.join(tex_path.file_stem().unwrap_or_default())
