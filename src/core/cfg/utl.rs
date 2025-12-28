@@ -83,8 +83,8 @@ clean_unpacked = {clean_unpacked}
 [pipeline]
 # === 是否启用增量处理 ===
 #     启用后，已处理过的壁纸将被跳过（根据 state.json 记录判断）
-#     Default/默认: true
-incremental = true
+#     Default/默认: false
+incremental = false
 
 # === 是否在流水线中自动执行 pkg 解包 ===
 #     Default/默认: true

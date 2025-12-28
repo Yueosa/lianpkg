@@ -32,7 +32,8 @@ pub fn run(args: &AutoArgs, config_path: Option<PathBuf>) -> Result<(), String> 
         enable_raw: if args.no_raw { Some(false) } else { None },
         clean_pkg_temp: if args.no_clean_temp { Some(false) } else { None },
         clean_unpacked: if args.no_clean_unpacked { Some(false) } else { None },
-        incremental: if args.incremental { Some(true) } else { None },
+        // 修复：-I 启用增量，无 -I 则禁用增量（覆盖配置文件默认值）
+        incremental: Some(args.incremental),
         auto_unpack_pkg: if args.no_pkg { Some(false) } else { None },
         auto_convert_tex: if args.no_tex { Some(false) } else { None },
     };
