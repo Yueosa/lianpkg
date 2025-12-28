@@ -3,6 +3,7 @@
 //! 提供美化的终端输出，支持表格、颜色、Box 等
 
 use std::path::Path;
+use super::logger;
 
 // ============================================================================
 // 字符串工具
@@ -124,10 +125,32 @@ pub fn error(text: &str) {
     eprintln!("  {} {}", colorize("✗", color::RED), colorize(text, color::RED));
 }
 
-/// 输出调试信息
+/// 输出调试信息（仅在 debug 模式下）
 #[allow(dead_code)]
 pub fn debug(text: &str) {
-    println!("  {} {}", colorize("⋯", color::DIM), colorize(text, color::DIM));
+    if logger::is_debug() {
+        println!("  {} {}", colorize("⋯", color::DIM), colorize(text, color::DIM));
+    }
+}
+
+/// 输出详细调试信息（带时间戳，仅 debug 模式）
+pub fn debug_verbose(label: &str, text: &str) {
+    if logger::is_debug() {
+        use chrono::Local;
+        let time = Local::now().format("%H:%M:%S%.3f");
+        println!("  {} [{}] {}: {}", 
+            colorize("⋯", color::DIM), 
+            time,
+            colorize(label, color::CYAN),
+            text
+        );
+    }
+}
+
+/// 检查是否为 debug 模式
+#[allow(dead_code)]
+pub fn is_debug() -> bool {
+    logger::is_debug()
 }
 
 // ============================================================================

@@ -41,11 +41,24 @@ pub fn run() {
             handlers::status::run(args, config_path)
         }
         None => {
-            // 无命令时显示帮助
-            use clap::CommandFactory;
-            let _ = Cli::command().print_help();
-            println!();
-            Ok(())
+            // Windows 下无参数时，默认执行 auto 模式
+            #[cfg(target_os = "windows")]
+            {
+                if !cli.quiet {
+                    output::info("No command specified, running in auto mode...");
+                    println!();
+                }
+                let auto_args = args::AutoArgs::default();
+                handlers::auto::run(&auto_args, config_path)
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                // Linux 下显示帮助
+                use clap::CommandFactory;
+                let _ = Cli::command().print_help();
+                println!();
+                Ok(())
+            }
         }
     };
 

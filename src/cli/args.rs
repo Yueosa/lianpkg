@@ -70,11 +70,11 @@ pub struct WallpaperArgs {
     pub path: Option<PathBuf>,
 
     /// 原始壁纸输出路径
-    #[arg(long = "raw-out", value_name = "PATH")]
+    #[arg(short = 'r', long = "raw-out", value_name = "PATH")]
     pub raw_output: Option<PathBuf>,
 
     /// PKG 临时输出路径
-    #[arg(long = "pkg-temp", value_name = "PATH")]
+    #[arg(short = 't', long = "pkg-temp", value_name = "PATH")]
     pub pkg_temp: Option<PathBuf>,
 
     /// 跳过原始壁纸复制（只提取 PKG）
@@ -82,15 +82,15 @@ pub struct WallpaperArgs {
     pub no_raw: bool,
 
     /// 只处理指定的壁纸 ID（逗号分隔）
-    #[arg(long, value_name = "IDS", value_delimiter = ',')]
+    #[arg(short = 'i', long, value_name = "IDS", value_delimiter = ',')]
     pub ids: Option<Vec<String>>,
 
     /// 预览模式（列出壁纸，不执行复制）
-    #[arg(long)]
+    #[arg(short = 'p', long)]
     pub preview: bool,
 
     /// 详细预览（显示完整元数据）
-    #[arg(long, short = 'V')]
+    #[arg(short = 'V', long)]
     pub verbose: bool,
 }
 
@@ -105,15 +105,15 @@ pub struct PkgArgs {
     pub path: Option<PathBuf>,
 
     /// 解包输出路径
-    #[arg(long, short, value_name = "PATH")]
+    #[arg(short = 'o', long, value_name = "PATH")]
     pub output: Option<PathBuf>,
 
     /// 预览模式（显示 PKG 内容，不解包）
-    #[arg(long)]
+    #[arg(short = 'p', long)]
     pub preview: bool,
 
     /// 详细预览
-    #[arg(long, short = 'V')]
+    #[arg(short = 'V', long)]
     pub verbose: bool,
 }
 
@@ -128,42 +128,40 @@ pub struct TexArgs {
     pub path: Option<PathBuf>,
 
     /// 转换输出路径
-    #[arg(long, short, value_name = "PATH")]
+    #[arg(short = 'o', long, value_name = "PATH")]
     pub output: Option<PathBuf>,
 
     /// 预览模式（显示 TEX 格式信息，不转换）
-    #[arg(long)]
+    #[arg(short = 'p', long)]
     pub preview: bool,
 
     /// 详细预览
-    #[arg(long, short = 'V')]
+    #[arg(short = 'V', long)]
     pub verbose: bool,
 }
 
 // ============================================================================
-// Auto 模式参数
-// ============================================================================
-
-#[derive(Args, Debug)]
+/// Auto 模式参数
+#[derive(Args, Debug, Default)]
 pub struct AutoArgs {
     /// 壁纸源目录
-    #[arg(long, value_name = "PATH")]
+    #[arg(short = 's', long, value_name = "PATH")]
     pub search: Option<PathBuf>,
 
     /// 原始壁纸输出路径
-    #[arg(long = "raw-out", value_name = "PATH")]
+    #[arg(short = 'r', long = "raw-out", value_name = "PATH")]
     pub raw_output: Option<PathBuf>,
 
     /// PKG 临时目录
-    #[arg(long = "pkg-temp", value_name = "PATH")]
+    #[arg(short = 't', long = "pkg-temp", value_name = "PATH")]
     pub pkg_temp: Option<PathBuf>,
 
     /// 解包输出目录
-    #[arg(long = "unpacked-out", value_name = "PATH")]
+    #[arg(short = 'u', long = "unpacked-out", value_name = "PATH")]
     pub unpacked_output: Option<PathBuf>,
 
     /// TEX 转换输出目录
-    #[arg(long = "tex-out", value_name = "PATH")]
+    #[arg(short = 'o', long = "tex-out", value_name = "PATH")]
     pub tex_output: Option<PathBuf>,
 
     /// 跳过原始壁纸提取
@@ -187,15 +185,15 @@ pub struct AutoArgs {
     pub no_clean_unpacked: bool,
 
     /// 增量处理（跳过已处理的壁纸）
-    #[arg(long)]
+    #[arg(short = 'I', long)]
     pub incremental: bool,
 
     /// 只处理指定壁纸 ID（逗号分隔）
-    #[arg(long, value_name = "IDS", value_delimiter = ',')]
+    #[arg(short = 'i', long, value_name = "IDS", value_delimiter = ',')]
     pub ids: Option<Vec<String>>,
 
     /// 仅显示计划执行的操作（不实际执行）
-    #[arg(long)]
+    #[arg(short = 'n', long)]
     pub dry_run: bool,
 }
 
