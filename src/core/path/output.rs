@@ -6,11 +6,16 @@
 use std::env;
 
 /// 获取默认的原始壁纸输出路径
-/// - Windows: %APPDATA%/lianpkg/Wallpapers_Raw
+/// - Windows (双击exe): ./Wallpapers_Raw (exe 同级)
+/// - Windows (命令行): %APPDATA%/lianpkg/Wallpapers_Raw
 /// - Linux: ~/.local/share/lianpkg/Wallpapers_Raw
 pub fn default_raw_output_path() -> String {
     #[cfg(target_os = "windows")]
     {
+        // 优先使用 exe 同级目录
+        if let Some(exe_dir) = super::cfg::exe_dir() {
+            return exe_dir.join("Wallpapers_Raw").to_string_lossy().to_string();
+        }
         windows_appdata_path("Wallpapers_Raw")
     }
     #[cfg(not(target_os = "windows"))]
@@ -20,11 +25,16 @@ pub fn default_raw_output_path() -> String {
 }
 
 /// 获取默认的 Pkg 临时路径
-/// - Windows: %APPDATA%/lianpkg/Pkg_Temp
+/// - Windows (双击exe): ./Pkg_Temp (exe 同级)
+/// - Windows (命令行): %APPDATA%/lianpkg/Pkg_Temp
 /// - Linux: ~/.local/share/lianpkg/Pkg_Temp
 pub fn default_pkg_temp_path() -> String {
     #[cfg(target_os = "windows")]
     {
+        // 优先使用 exe 同级目录
+        if let Some(exe_dir) = super::cfg::exe_dir() {
+            return exe_dir.join("Pkg_Temp").to_string_lossy().to_string();
+        }
         windows_appdata_path("Pkg_Temp")
     }
     #[cfg(not(target_os = "windows"))]
@@ -34,11 +44,16 @@ pub fn default_pkg_temp_path() -> String {
 }
 
 /// 获取默认的解包输出路径
-/// - Windows: %APPDATA%/lianpkg/Pkg_Unpacked
+/// - Windows (双击exe): ./Pkg_Unpacked (exe 同级)
+/// - Windows (命令行): %APPDATA%/lianpkg/Pkg_Unpacked
 /// - Linux: ~/.local/share/lianpkg/Pkg_Unpacked
 pub fn default_unpacked_output_path() -> String {
     #[cfg(target_os = "windows")]
     {
+        // 优先使用 exe 同级目录
+        if let Some(exe_dir) = super::cfg::exe_dir() {
+            return exe_dir.join("Pkg_Unpacked").to_string_lossy().to_string();
+        }
         windows_appdata_path("Pkg_Unpacked")
     }
     #[cfg(not(target_os = "windows"))]

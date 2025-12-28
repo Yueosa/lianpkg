@@ -68,7 +68,14 @@ pub fn run() {
         std::process::exit(1);
     }
 
-    // Windows 下等待用户确认
-    output::press_enter_to_exit();
+    // Windows 下等待用户确认（显示配置文件路径）
+    #[cfg(target_os = "windows")]
+    {
+        output::press_enter_to_exit_with_config(config_path.as_deref());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        output::press_enter_to_exit();
+    }
 }
 

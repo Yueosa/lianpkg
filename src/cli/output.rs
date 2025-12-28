@@ -343,17 +343,25 @@ pub fn confirm(prompt: &str) -> bool {
 
 /// Windows 下按任意键继续
 #[cfg(windows)]
-pub fn press_enter_to_exit() {
+pub fn press_enter_to_exit_with_config(config_path: Option<&Path>) {
     use std::io::Write;
-    use std::env;
-    if let Ok(appdata) = env::var("APPDATA") {
-        println!("\n  配置文件已生成于: {}\\lianpkg\\config.toml", appdata);
-    } else {
-        println!("\n  配置文件已生成于: %APPDATA%\\lianpkg\\config.toml");
+    if let Some(path) = config_path {
+        println!("\n  配置文件路径: {}", path.display());
     }
     print!("\n  Press Enter to exit...");
     let _ = std::io::stdout().flush();
     let _ = std::io::stdin().read_line(&mut String::new());
+}
+
+#[cfg(windows)]
+pub fn press_enter_to_exit() {
+    press_enter_to_exit_with_config(None);
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+pub fn press_enter_to_exit_with_config(_config_path: Option<&Path>) {
+    // Linux/macOS 不需要
 }
 
 #[cfg(not(windows))]
