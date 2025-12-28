@@ -19,6 +19,8 @@ pub fn run() {
 
     // 获取配置路径
     let config_path = cli.config.clone();
+    // 保存一份用于最后显示
+    let config_path_for_display = config_path.clone();
 
     // 分发命令
     let result = match cli.command {
@@ -71,7 +73,7 @@ pub fn run() {
     // Windows 下等待用户确认（显示配置文件路径）
     #[cfg(target_os = "windows")]
     {
-        output::press_enter_to_exit_with_config(config_path.as_deref());
+        output::press_enter_to_exit_with_config(config_path_for_display.as_deref());
     }
     #[cfg(not(target_os = "windows"))]
     {
