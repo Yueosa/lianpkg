@@ -26,8 +26,39 @@ pub struct RunPipelineInput {
     pub state_path: PathBuf,
     /// 要处理的壁纸 ID 列表，None 表示全部
     pub wallpaper_ids: Option<Vec<String>>,
+    /// 参数覆盖（CLI 参数优先级高于配置文件）
+    pub overrides: Option<PipelineOverrides>,
     /// 进度回调（可选）
     pub progress_callback: Option<fn(PipelineProgress)>,
+}
+
+/// 流水线参数覆盖
+/// 
+/// CLI 参数可通过此结构覆盖配置文件的设置
+#[derive(Debug, Clone, Default)]
+pub struct PipelineOverrides {
+    /// 覆盖 workshop_path
+    pub workshop_path: Option<PathBuf>,
+    /// 覆盖 raw_output_path
+    pub raw_output_path: Option<PathBuf>,
+    /// 覆盖 pkg_temp_path
+    pub pkg_temp_path: Option<PathBuf>,
+    /// 覆盖 unpacked_output_path
+    pub unpacked_output_path: Option<PathBuf>,
+    /// 覆盖 converted_output_path
+    pub tex_output_path: Option<PathBuf>,
+    /// 覆盖 enable_raw_output
+    pub enable_raw: Option<bool>,
+    /// 覆盖 clean_pkg_temp
+    pub clean_pkg_temp: Option<bool>,
+    /// 覆盖 clean_unpacked
+    pub clean_unpacked: Option<bool>,
+    /// 覆盖 incremental
+    pub incremental: Option<bool>,
+    /// 覆盖 auto_unpack_pkg
+    pub auto_unpack_pkg: Option<bool>,
+    /// 覆盖 auto_convert_tex
+    pub auto_convert_tex: Option<bool>,
 }
 
 /// 流水线执行返回值
@@ -126,6 +157,44 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
     let start_time = Instant::now();
 
     let mut stats = PipelineStats::default();
+    
+    // 应用参数覆盖
+    let mut config = input.config;
+    if let Some(ref overrides) = input.overrides {
+        if let Some(ref p) = overrides.workshop_path {
+            config.workshop_path = p.clone();
+        }
+        if let Some(ref p) = overrides.raw_output_path {
+            config.raw_output_path = p.clone();
+        }
+        if let Some(ref p) = overrides.pkg_temp_path {
+            config.pkg_temp_path = p.clone();
+        }
+        if let Some(ref p) = overrides.unpacked_output_path {
+            config.unpacked_output_path = p.clone();
+        }
+        if let Some(ref p) = overrides.tex_output_path {
+            config.converted_output_path = Some(p.clone());
+        }
+        if let Some(enable) = overrides.enable_raw {
+            config.enable_raw_output = enable;
+        }
+        if let Some(clean) = overrides.clean_pkg_temp {
+            config.clean_pkg_temp = clean;
+        }
+        if let Some(clean) = overrides.clean_unpacked {
+            config.clean_unpacked = clean;
+        }
+        if let Some(inc) = overrides.incremental {
+            config.pipeline.incremental = inc;
+        }
+        if let Some(unpack) = overrides.auto_unpack_pkg {
+            config.pipeline.auto_unpack_pkg = unpack;
+        }
+        if let Some(convert) = overrides.auto_convert_tex {
+            config.pipeline.auto_convert_tex = convert;
+        }
+    }
 
     // 报告进度
     let report_progress = |stage: PipelineStage, progress: u8, item: Option<String>, msg: &str| {
@@ -146,7 +215,7 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
     // 阶段2: 扫描壁纸
     report_progress(PipelineStage::Scanning, 10, None, "Scanning wallpapers...");
     let scan_result = native_paper::scan_wallpapers(native_paper::ScanWallpapersInput {
-        workshop_path: input.config.workshop_path.clone(),
+        workshop_path: config.workshop_path.clone(),
     });
 
     if !scan_result.success {
@@ -161,7 +230,7 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
     }
 
     // 筛选待处理的壁纸（增量处理）
-    let wallpapers_to_process: Vec<String> = if input.config.pipeline.incremental {
+    let wallpapers_to_process: Vec<String> = if config.pipeline.incremental {
         scan_result.wallpapers.iter()
             .filter(|w| {
                 // 检查是否在指定列表中
@@ -190,10 +259,10 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
     report_progress(PipelineStage::Copying, 30, None, "Copying wallpapers...");
     let paper_result = native_paper::copy_wallpapers(native_paper::CopyWallpapersInput {
         wallpaper_ids: Some(wallpapers_to_process.clone()),
-        workshop_path: input.config.workshop_path.clone(),
-        raw_output_path: input.config.raw_output_path.clone(),
-        pkg_temp_path: input.config.pkg_temp_path.clone(),
-        enable_raw: input.config.enable_raw_output,
+        workshop_path: config.workshop_path.clone(),
+        raw_output_path: config.raw_output_path.clone(),
+        pkg_temp_path: config.pkg_temp_path.clone(),
+        enable_raw: config.enable_raw_output,
     });
 
     stats.wallpapers_processed = paper_result.results.len();
@@ -216,11 +285,11 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
     }
 
     // 阶段4: 解包 PKG（如果启用）
-    let pkg_result = if input.config.pipeline.auto_unpack_pkg && paper_result.stats.pkg_copied > 0 {
+    let pkg_result = if config.pipeline.auto_unpack_pkg && paper_result.stats.pkg_copied > 0 {
         report_progress(PipelineStage::Unpacking, 50, None, "Unpacking PKG files...");
         let result = native_pkg::unpack_all(native_pkg::UnpackAllInput {
-            pkg_temp_path: input.config.pkg_temp_path.clone(),
-            unpacked_output_path: input.config.unpacked_output_path.clone(),
+            pkg_temp_path: config.pkg_temp_path.clone(),
+            unpacked_output_path: config.unpacked_output_path.clone(),
         });
         stats.pkgs_unpacked = result.stats.pkg_success;
         Some(result)
@@ -229,13 +298,13 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
     };
 
     // 阶段5: 转换 TEX（如果启用）
-    let tex_result = if input.config.pipeline.auto_convert_tex {
+    let tex_result = if config.pipeline.auto_convert_tex {
         if let Some(ref pkg_res) = pkg_result {
             if pkg_res.stats.tex_files > 0 {
                 report_progress(PipelineStage::Converting, 70, None, "Converting TEX files...");
                 let result = native_tex::convert_all(native_tex::ConvertAllInput {
-                    unpacked_path: input.config.unpacked_output_path.clone(),
-                    output_path: input.config.converted_output_path.clone(),
+                    unpacked_path: config.unpacked_output_path.clone(),
+                    output_path: config.converted_output_path.clone(),
                 });
                 stats.texs_converted = result.stats.tex_success;
                 Some(result)
@@ -244,12 +313,12 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
             }
         } else {
             // 即使没有新的 PKG 解包，也检查是否有待转换的 TEX
-            let tex_files = native_pkg::get_tex_files_from_unpacked(&input.config.unpacked_output_path);
+            let tex_files = native_pkg::get_tex_files_from_unpacked(&config.unpacked_output_path);
             if !tex_files.is_empty() {
                 report_progress(PipelineStage::Converting, 70, None, "Converting TEX files...");
                 let result = native_tex::convert_all(native_tex::ConvertAllInput {
-                    unpacked_path: input.config.unpacked_output_path.clone(),
-                    output_path: input.config.converted_output_path.clone(),
+                    unpacked_path: config.unpacked_output_path.clone(),
+                    output_path: config.converted_output_path.clone(),
                 });
                 stats.texs_converted = result.stats.tex_success;
                 Some(result)
@@ -264,20 +333,20 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
     // 复制元数据到 tex_converted 目录
     if tex_result.is_some() {
         report_progress(PipelineStage::Cleanup, 85, None, "Copying metadata...");
-        copy_metadata_to_tex_converted(&input.config);
+        copy_metadata_to_tex_converted(&config);
     }
 
     // 阶段6: 清理
     report_progress(PipelineStage::Cleanup, 90, None, "Cleaning up...");
     
     // 清理 pkg_temp 目录
-    if input.config.clean_pkg_temp {
-        let _ = std::fs::remove_dir_all(&input.config.pkg_temp_path);
+    if config.clean_pkg_temp {
+        let _ = std::fs::remove_dir_all(&config.pkg_temp_path);
     }
 
     // 清理 unpacked 目录（保留 tex_converted）
-    if input.config.clean_unpacked {
-        clean_unpacked_dir(&input.config.unpacked_output_path);
+    if config.clean_unpacked {
+        clean_unpacked_dir(&config.unpacked_output_path);
     }
 
     // 更新统计并保存状态
@@ -314,6 +383,7 @@ pub fn quick_run(input: QuickRunInput) -> QuickRunOutput {
     // 初始化配置
     let init_result = native_cfg::init_config(native_cfg::InitConfigInput {
         config_dir: input.config_dir,
+        use_exe_dir: false,  // API 层调用，使用标准路径
     });
 
     // 加载配置
@@ -342,6 +412,7 @@ pub fn quick_run(input: QuickRunInput) -> QuickRunOutput {
         config,
         state_path: init_result.state_path,
         wallpaper_ids: None,
+        overrides: None,
         progress_callback: None,
     });
 

@@ -16,6 +16,8 @@ use crate::core::{cfg, path};
 pub struct InitConfigInput {
     /// 自定义配置目录，None 则使用默认目录
     pub config_dir: Option<PathBuf>,
+    /// 是否优先使用 exe 同目录（仅 Windows）
+    pub use_exe_dir: bool,
 }
 
 /// 初始化配置返回值
@@ -132,7 +134,18 @@ pub struct SaveStateOutput {
 /// 确保 config.toml 和 state.json 都存在，不存在则创建默认内容
 pub fn init_config(input: InitConfigInput) -> InitConfigOutput {
     // 确定配置目录
-    let config_dir = input.config_dir.unwrap_or_else(path::default_config_dir);
+    let config_dir = input.config_dir.unwrap_or_else(|| {
+        // Windows 下，如果设置了 use_exe_dir，优先使用 exe 同目录
+        #[cfg(target_os = "windows")]
+        {
+            if input.use_exe_dir {
+                if let Some(dir) = path::exe_config_dir() {
+                    return dir;
+                }
+            }
+        }
+        path::default_config_dir()
+    });
     let config_path = config_dir.join("config.toml");
     let state_path = config_dir.join("state.json");
 

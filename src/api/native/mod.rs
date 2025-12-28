@@ -145,6 +145,7 @@ pub use pipeline::{
     // 结构体
     RunPipelineInput, RunPipelineOutput,
     PipelineStats, PipelineProgress, PipelineStage,
+    PipelineOverrides,
     QuickRunInput, QuickRunOutput,
     // 接口
     run_pipeline,
