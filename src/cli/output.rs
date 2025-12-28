@@ -3,44 +3,122 @@
 //! 提供美化的终端输出，支持表格、颜色、Box 等
 
 use std::path::Path;
+use std::sync::Mutex;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use super::logger;
+
+// ============================================================================
+// 进度条状态管理
+// ============================================================================
+
+/// 当前进度条状态
+struct ProgressState {
+    active: bool,
+    label: String,
+    current: usize,
+    total: usize,
+}
+
+impl Default for ProgressState {
+    fn default() -> Self {
+        Self {
+            active: false,
+            label: String::new(),
+            current: 0,
+            total: 0,
+        }
+    }
+}
+
+static PROGRESS_STATE: Mutex<ProgressState> = Mutex::new(ProgressState {
+    active: false,
+    label: String::new(),
+    current: 0,
+    total: 0,
+});
 
 // ============================================================================
 // 字符串工具
 // ============================================================================
 
-/// 计算字符串的显示宽度（中文字符占2格）
-fn display_width(s: &str) -> usize {
-    s.chars().map(|c| {
-        if c.is_ascii() {
-            1
+/// 计算单个字符的显示宽度
+fn char_width(c: char) -> usize {
+    // unicode-width 的 .width() 会返回 Option<usize>，不可打印字符返回 None
+    c.width().unwrap_or(0)
+}
+
+/// 去除字符串中的 ANSI 转义序列
+fn strip_ansi(s: &str) -> String {
+    let mut result = String::new();
+    let mut chars = s.chars().peekable();
+    
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // 跳过 ANSI 转义序列: ESC [ ... m
+            if chars.peek() == Some(&'[') {
+                chars.next(); // 消费 '['
+                // 跳过直到遇到 'm'
+                while let Some(&ch) = chars.peek() {
+                    chars.next();
+                    if ch == 'm' {
+                        break;
+                    }
+                }
+            }
         } else {
-            // CJK 字符通常占 2 格
-            2
+            result.push(c);
         }
-    }).sum()
+    }
+    result
+}
+
+/// 计算字符串的显示宽度（自动过滤 ANSI 转义序列）
+fn display_width(s: &str) -> usize {
+    // 先去除 ANSI 序列，再调用 unicode-width 的字符串扩展方法
+    let stripped = strip_ansi(s);
+    UnicodeWidthStr::width(stripped.as_str())
 }
 
 /// 按显示宽度截断字符串（UTF-8 安全）
 fn truncate_str(s: &str, max_width: usize) -> String {
+    let current_width = display_width(s);
+    
+    // 不需要截断
+    if current_width <= max_width {
+        return s.to_string();
+    }
+    
+    // 需要截断，保留 "..." (3个字符宽度)
     if max_width < 4 {
-        return "...".to_string();
+        return ".".repeat(max_width);
     }
     
     let mut width = 0;
     let mut result = String::new();
+    let target_width = max_width - 3;  // 为 "..." 保留空间
     
     for c in s.chars() {
-        let char_width = if c.is_ascii() { 1 } else { 2 };
-        if width + char_width > max_width - 3 {
-            result.push_str("...");
-            return result;
+        let cw = char_width(c);
+        if width + cw > target_width {
+            break;
         }
-        width += char_width;
+        width += cw;
         result.push(c);
     }
     
+    result.push_str("...");
     result
+}
+
+/// 按显示宽度填充字符串（右侧补空格）
+#[allow(dead_code)]
+fn pad_str(s: &str, width: usize) -> String {
+    let current_width = display_width(s);
+    if current_width >= width {
+        s.to_string()
+    } else {
+        format!("{}{}", s, " ".repeat(width - current_width))
+    }
 }
 
 // ============================================================================
@@ -90,46 +168,55 @@ fn colorize(text: &str, code: &str) -> String {
 // 基础输出函数
 // ============================================================================
 
-/// 输出标题
+/// 检查是否为 quiet 模式
+pub fn is_quiet() -> bool {
+    logger::is_quiet()
+}
+
+/// 输出标题 (quiet 模式下不输出)
 pub fn title(text: &str) {
-    let line = "═".repeat(text.len() + 4);
+    if is_quiet() { return; }
+    let text_width = display_width(text);
+    let line = "═".repeat(text_width + 4);
     println!();
     println!("{}", colorize(&line, color::CYAN));
     println!("{}", colorize(&format!("  {}  ", text), &format!("{}{}", color::BOLD, color::CYAN)));
     println!("{}", colorize(&line, color::CYAN));
 }
 
-/// 输出子标题
+/// 输出子标题 (quiet 模式下不输出)
 pub fn subtitle(text: &str) {
+    if is_quiet() { return; }
     println!();
-    println!("{} {}", colorize("▶", color::BLUE), colorize(text, color::BOLD));
+    println!("{}  {}", colorize("▶", color::BLUE), colorize(text, color::BOLD));
 }
 
-/// 输出信息
+/// 输出信息 (quiet 模式下不输出)
 pub fn info(text: &str) {
-    println!("  {} {}", colorize("ℹ", color::BLUE), text);
+    if is_quiet() { return; }
+    println!("  {}  {}", colorize("ℹ", color::BLUE), text);
 }
 
-/// 输出成功
+/// 输出成功 (quiet 模式下仍然输出)
 pub fn success(text: &str) {
-    println!("  {} {}", colorize("✓", color::GREEN), colorize(text, color::GREEN));
+    println!("  {}  {}", colorize("✓", color::GREEN), colorize(text, color::GREEN));
 }
 
-/// 输出警告
+/// 输出警告 (quiet 模式下仍然输出)
 pub fn warning(text: &str) {
-    println!("  {} {}", colorize("⚠", color::YELLOW), colorize(text, color::YELLOW));
+    println!("  {}  {}", colorize("⚠", color::YELLOW), colorize(text, color::YELLOW));
 }
 
-/// 输出错误
+/// 输出错误 (quiet 模式下仍然输出)
 pub fn error(text: &str) {
-    eprintln!("  {} {}", colorize("✗", color::RED), colorize(text, color::RED));
+    eprintln!("  {}  {}", colorize("✗", color::RED), colorize(text, color::RED));
 }
 
 /// 输出调试信息（仅在 debug 模式下）
 #[allow(dead_code)]
 pub fn debug(text: &str) {
     if logger::is_debug() {
-        println!("  {} {}", colorize("⋯", color::DIM), colorize(text, color::DIM));
+        println!("  {}  {}", colorize("⋯", color::DIM), colorize(text, color::DIM));
     }
 }
 
@@ -138,11 +225,57 @@ pub fn debug_verbose(label: &str, text: &str) {
     if logger::is_debug() {
         use chrono::Local;
         let time = Local::now().format("%H:%M:%S%.3f");
-        println!("  {} [{}] {}: {}", 
+        println!("  {}  [{}] {}: {}", 
             colorize("⋯", color::DIM), 
             time,
             colorize(label, color::CYAN),
             text
+        );
+    }
+}
+
+/// API 调用追踪 - 进入 (仅 debug 模式)
+/// 格式: [17:23:45.123] API → module::function(args)
+#[allow(dead_code)]
+pub fn debug_api_enter(module: &str, function: &str, args: &str) {
+    if logger::is_debug() {
+        use chrono::Local;
+        let time = Local::now().format("%H:%M:%S%.3f");
+        println!("[{}] {} → {}::{}({})", 
+            colorize(&time.to_string(), color::DIM),
+            colorize("API", color::MAGENTA),
+            colorize(module, color::CYAN),
+            colorize(function, color::CYAN),
+            args
+        );
+    }
+}
+
+/// API 调用追踪 - 返回 (仅 debug 模式)
+/// 格式: [17:23:45.456] API ← result_summary
+#[allow(dead_code)]
+pub fn debug_api_return(result: &str) {
+    if logger::is_debug() {
+        use chrono::Local;
+        let time = Local::now().format("%H:%M:%S%.3f");
+        println!("[{}] {} ← {}", 
+            colorize(&time.to_string(), color::DIM),
+            colorize("API", color::MAGENTA),
+            colorize(result, color::GREEN)
+        );
+    }
+}
+
+/// API 调用追踪 - 错误 (仅 debug 模式)
+#[allow(dead_code)]
+pub fn debug_api_error(error: &str) {
+    if logger::is_debug() {
+        use chrono::Local;
+        let time = Local::now().format("%H:%M:%S%.3f");
+        eprintln!("[{}] {} ✗ {}", 
+            colorize(&time.to_string(), color::DIM),
+            colorize("API", color::MAGENTA),
+            colorize(error, color::RED)
         );
     }
 }
@@ -168,9 +301,10 @@ pub fn format_path(path: &Path, max_len: usize) -> String {
     }
 }
 
-/// 输出路径信息
+/// 输出路径信息 (quiet 模式下不输出)
 pub fn path_info(label: &str, path: &Path) {
-    println!("  {} {}: {}", 
+    if is_quiet() { return; }
+    println!("  {}  {}: {}", 
         colorize("📁", color::BLUE),
         colorize(label, color::DIM),
         path.display()
@@ -181,8 +315,9 @@ pub fn path_info(label: &str, path: &Path) {
 // 表格输出
 // ============================================================================
 
-/// 简单表格行
+/// 简单表格行 (quiet 模式下不输出)
 pub fn table_row(cols: &[(&str, usize)]) {
+    if is_quiet() { return; }
     let formatted: Vec<String> = cols.iter()
         .map(|(text, width)| {
             let s = truncate_str(text, *width);
@@ -195,8 +330,9 @@ pub fn table_row(cols: &[(&str, usize)]) {
     println!("  {}", formatted.join("  "));
 }
 
-/// 表格分隔线
+/// 表格分隔线 (quiet 模式下不输出)
 pub fn table_separator(widths: &[usize]) {
+    if is_quiet() { return; }
     let line: String = widths.iter()
         .map(|w| "─".repeat(*w))
         .collect::<Vec<_>>()
@@ -204,8 +340,9 @@ pub fn table_separator(widths: &[usize]) {
     println!("  {}", colorize(&line, color::DIM));
 }
 
-/// 表格标题行
+/// 表格标题行 (quiet 模式下不输出)
 pub fn table_header(cols: &[(&str, usize)]) {
+    if is_quiet() { return; }
     let formatted: Vec<String> = cols.iter()
         .map(|(text, width)| format!("{:width$}", text, width = width))
         .collect();
@@ -219,41 +356,66 @@ pub fn table_header(cols: &[(&str, usize)]) {
 // Box 输出
 // ============================================================================
 
-/// 输出带边框的内容块
+/// Box 宽度常量（内容区域宽度，不含边框）
+const BOX_INNER_WIDTH: usize = 50;
+
+/// 输出带边框的内容块开始 (quiet 模式下不输出)
 pub fn box_start(title: &str) {
-    const BOX_WIDTH: usize = 52;
-    let border = format!("┌─ {} ", title);
-    let border_width = display_width(&border);
-    let padding = "─".repeat(BOX_WIDTH.saturating_sub(border_width));
-    println!("{}{}{}", colorize(&border, color::CYAN), colorize(&padding, color::CYAN), colorize("┐", color::CYAN));
+    if is_quiet() { return; }
+    // 格式: ┌─ title ─────────────────────────────────────────┐
+    let prefix = "┌─ ";
+    let suffix = " ";
+    let title_width = display_width(title);
+    
+    // 计算需要多少个 ─ 来填充
+    // 总宽度 = BOX_INNER_WIDTH + 2 (左右边框各1)
+    // prefix(3) + title + suffix(1) + padding + ┐(1) = BOX_INNER_WIDTH + 2
+    let used = 3 + title_width + 1;  // prefix 宽度 + title 宽度 + suffix 宽度
+    let padding_count = (BOX_INNER_WIDTH + 2).saturating_sub(used + 1);  // -1 for ┐
+    let padding = "─".repeat(padding_count);
+    
+    println!("{}", colorize(&format!("{}{}{}{}┐", prefix, title, suffix, padding), color::CYAN));
 }
 
+/// 输出 Box 内容行 (quiet 模式下不输出)
 pub fn box_line(label: &str, value: &str) {
-    const BOX_WIDTH: usize = 52;
+    if is_quiet() { return; }
+    // 格式: │ Label:        value                              │
+    let label_col_width = 14;  // label 列固定宽度
     
     let label_part = if label.is_empty() {
-        "               ".to_string()  // 15 spaces for alignment
+        " ".repeat(label_col_width)
     } else {
-        format!("{:12}  ", format!("{}:", label))
+        let label_with_colon = format!("{}:", label);
+        let label_width = display_width(&label_with_colon);
+        let padding = " ".repeat(label_col_width.saturating_sub(label_width));
+        format!("{}{}", label_with_colon, padding)
     };
     
-    let max_value_width = BOX_WIDTH.saturating_sub(display_width(&label_part) + 4); // 4 = "│ " + " │"
-    let truncated_value = truncate_str(value, max_value_width);
+    // 计算 value 的最大宽度
+    let value_max_width = BOX_INNER_WIDTH.saturating_sub(label_col_width + 1);  // -1 for space before │
+    let truncated_value = truncate_str(value, value_max_width);
+    let value_width = display_width(&truncated_value);
     
+    // 计算右侧填充
     let content = format!("{}{}", label_part, truncated_value);
-    let content_width = display_width(&content);
-    let padding = " ".repeat(BOX_WIDTH.saturating_sub(content_width + 4));
+    let content_width = display_width(&label_part) + value_width;
+    let right_padding = " ".repeat(BOX_INNER_WIDTH.saturating_sub(content_width));
     
     println!("{} {}{} {}", 
         colorize("│", color::CYAN),
         content,
-        padding,
+        right_padding,
         colorize("│", color::CYAN)
     );
 }
 
+/// 输出 Box 结束行 (quiet 模式下不输出)
 pub fn box_end() {
-    println!("{}", colorize(&format!("└{}┘", "─".repeat(52)), color::CYAN));
+    if is_quiet() { return; }
+    // 格式: └──────────────────────────────────────────────────┘
+    let inner = "─".repeat(BOX_INNER_WIDTH);
+    println!("{}", colorize(&format!("└{}┘", inner), color::CYAN));
 }
 
 // ============================================================================
@@ -273,11 +435,27 @@ pub fn progress_bar(current: usize, total: usize, width: usize) -> String {
     )
 }
 
-/// 输出进度
+/// 输出进度 (quiet 模式和 debug 模式下不输出)
 pub fn progress(label: &str, current: usize, total: usize) {
+    // quiet 模式或 debug 模式下不显示进度条
+    if is_quiet() || logger::is_debug() { return; }
+    
+    // 保存进度条状态
+    if let Ok(mut state) = PROGRESS_STATE.lock() {
+        state.active = true;
+        state.label = label.to_string();
+        state.current = current;
+        state.total = total;
+    }
+    
+    render_progress(label, current, total);
+}
+
+/// 内部渲染进度条（不更新状态）
+fn render_progress(label: &str, current: usize, total: usize) {
     let bar = progress_bar(current, total, 20);
     let percent = if total > 0 { current * 100 / total } else { 0 };
-    print!("\r  {} {} [{}] {}%  ", 
+    print!("\r  {}  {} [{}] {}%  ", 
         colorize("⏳", color::YELLOW),
         label,
         bar,
@@ -289,7 +467,15 @@ pub fn progress(label: &str, current: usize, total: usize) {
 
 /// 清除进度行
 pub fn clear_progress() {
-    print!("\r{}\r", " ".repeat(80));
+    // debug 模式下不操作（因为根本没有进度条）
+    if is_quiet() || logger::is_debug() { return; }
+    
+    // 清除进度条状态
+    if let Ok(mut state) = PROGRESS_STATE.lock() {
+        state.active = false;
+    }
+    
+    print!("\r{}\r", " ".repeat(100));
     use std::io::Write;
     let _ = std::io::stdout().flush();
 }
@@ -298,8 +484,9 @@ pub fn clear_progress() {
 // 统计输出
 // ============================================================================
 
-/// 输出统计项
+/// 输出统计项 (quiet 模式下不输出)
 pub fn stat(label: &str, value: impl std::fmt::Display) {
+    if is_quiet() { return; }
     println!("  {:20} {}", 
         colorize(&format!("{}:", label), color::DIM),
         colorize(&value.to_string(), color::BOLD)
@@ -321,6 +508,34 @@ pub fn format_size(bytes: u64) -> String {
     } else {
         format!("{} B", bytes)
     }
+}
+
+// ============================================================================
+// Quiet 模式专用输出
+// ============================================================================
+
+/// Quiet 模式下的简洁摘要输出 (始终输出，专为 -q 设计)
+/// 格式: LianPkg v0.4.3 | 36 wallpapers | ~2.5 GB estimated
+#[allow(dead_code)]
+pub fn quiet_summary(version: &str, wallpaper_count: usize, estimated_size: u64) {
+    println!("LianPkg {} | {} wallpapers | ~{} estimated",
+        version,
+        wallpaper_count,
+        format_size(estimated_size)
+    );
+}
+
+/// Quiet 模式下的路径输出 (始终输出)
+#[allow(dead_code)]
+pub fn quiet_path(label: &str, path: &Path) {
+    println!("{}: {}", label, path.display());
+}
+
+/// Quiet 模式下的结果输出 (始终输出)
+/// 格式: Done in 45.2s (21 PKG → 156 images)
+#[allow(dead_code)]
+pub fn quiet_result(duration_secs: f64, pkg_count: usize, image_count: usize) {
+    println!("Done in {:.1}s ({} PKG → {} images)", duration_secs, pkg_count, image_count);
 }
 
 // ============================================================================

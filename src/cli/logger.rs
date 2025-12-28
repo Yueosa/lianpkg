@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use chrono::Local;
 
 static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
+static QUIET_MODE: AtomicBool = AtomicBool::new(false);
 static INDENT_LEVEL: AtomicUsize = AtomicUsize::new(0);
 
 pub fn set_debug(debug: bool) {
@@ -10,6 +11,14 @@ pub fn set_debug(debug: bool) {
 
 pub fn is_debug() -> bool {
     DEBUG_MODE.load(Ordering::Relaxed)
+}
+
+pub fn set_quiet(quiet: bool) {
+    QUIET_MODE.store(quiet, Ordering::Relaxed);
+}
+
+pub fn is_quiet() -> bool {
+    QUIET_MODE.load(Ordering::Relaxed)
 }
 
 #[allow(dead_code)]

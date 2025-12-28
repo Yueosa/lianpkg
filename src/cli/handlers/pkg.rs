@@ -10,15 +10,19 @@ use lianpkg::core::path;
 /// 执行 pkg 命令
 pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     // 加载配置
+    out::debug_api_enter("native", "init_config", &format!("config_path={:?}", config_path));
     let use_exe_dir = config_path.is_none();
     let init_result = native::init_config(native::InitConfigInput {
         config_dir: config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf()),
         use_exe_dir,
     });
+    out::debug_api_return(&format!("config_path={}", init_result.config_path.display()));
 
+    out::debug_api_enter("native", "load_config", &format!("path={}", init_result.config_path.display()));
     let config_result = native::load_config(native::LoadConfigInput {
         config_path: init_result.config_path.clone(),
     });
+    out::debug_api_return(&format!("loaded={}", config_result.config.is_some()));
 
     let config = config_result.config
         .ok_or("Failed to load config")?;
@@ -52,11 +56,14 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     // 判断是单文件还是目录
     if input_path.is_file() && input_path.extension().map(|e| e == "pkg").unwrap_or(false) {
         // 单文件解包
+        out::debug_api_enter("pkg", "unpack_single", &format!("input={}", input_path.display()));
         let result = pkg::unpack_single(input_path.clone(), output_path);
         
         if !result.success {
+            out::debug_api_error(&result.error.as_deref().unwrap_or("Unknown error"));
             return Err(result.error.unwrap_or_else(|| "Unknown error".to_string()));
         }
+        out::debug_api_return(&format!("scene={}, files={}", result.scene_name, result.files.len()));
 
         out::subtitle("Results");
         out::stat("Scene", &result.scene_name);
@@ -68,14 +75,20 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
         out::success("PKG unpack completed!");
     } else {
         // 目录批量解包
+        out::debug_api_enter("pkg", "unpack_all", &format!("input={}", input_path.display()));
         let result = pkg::unpack_all(pkg::UnpackAllInput {
             pkg_temp_path: input_path,
             unpacked_output_path: output_path,
         });
 
         if !result.success && result.stats.pkg_success == 0 {
+            out::debug_api_error(&result.error.as_deref().unwrap_or("Unknown error"));
             return Err(result.error.unwrap_or_else(|| "Unknown error".to_string()));
         }
+        out::debug_api_return(&format!(
+            "processed={}, success={}, failed={}",
+            result.stats.pkg_processed, result.stats.pkg_success, result.stats.pkg_failed
+        ));
 
         out::subtitle("Results");
         out::stat("PKGs Processed", result.stats.pkg_processed);

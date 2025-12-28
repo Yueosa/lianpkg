@@ -14,7 +14,7 @@ use args::{Cli, Command};
 pub fn run() {
     let cli = Cli::parse();
 
-    // 设置日志级别
+    // 设置调试模式
     logger::set_debug(cli.debug);
 
     // 获取配置路径

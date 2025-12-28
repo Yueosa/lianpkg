@@ -10,15 +10,19 @@ use lianpkg::core::path;
 /// 执行 tex 命令
 pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     // 加载配置
+    out::debug_api_enter("native", "init_config", &format!("config_path={:?}", config_path));
     let use_exe_dir = config_path.is_none();
     let init_result = native::init_config(native::InitConfigInput {
         config_dir: config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf()),
         use_exe_dir,
     });
+    out::debug_api_return(&format!("config_path={}", init_result.config_path.display()));
 
+    out::debug_api_enter("native", "load_config", &format!("path={}", init_result.config_path.display()));
     let config_result = native::load_config(native::LoadConfigInput {
         config_path: init_result.config_path.clone(),
     });
+    out::debug_api_return(&format!("loaded={}", config_result.config.is_some()));
 
     let config = config_result.config
         .ok_or("Failed to load config")?;
@@ -62,11 +66,14 @@ pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
             input_path.parent().unwrap_or(&input_path).join("tex_converted")
         });
         
+        out::debug_api_enter("tex", "convert_single", &format!("input={}", input_path.display()));
         let result = tex::convert_single(input_path.clone(), out_path);
         
         if !result.success {
+            out::debug_api_error(&result.error.as_deref().unwrap_or("Unknown error"));
             return Err(result.error.unwrap_or_else(|| "Unknown error".to_string()));
         }
+        out::debug_api_return(&format!("output={}", result.output_path.display()));
 
         out::subtitle("Results");
         out::stat("Output", result.output_path.display());
@@ -78,14 +85,21 @@ pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
         out::success("TEX conversion completed!");
     } else {
         // 目录批量转换
+        out::debug_api_enter("tex", "convert_all", &format!("input={}", input_path.display()));
         let result = tex::convert_all(tex::ConvertAllInput {
             unpacked_path: input_path,
             output_path,
         });
 
         if !result.success && result.stats.tex_success == 0 {
+            out::debug_api_error(&result.error.as_deref().unwrap_or("Unknown error"));
             return Err(result.error.unwrap_or_else(|| "Unknown error".to_string()));
         }
+        out::debug_api_return(&format!(
+            "processed={}, success={}, images={}, videos={}",
+            result.stats.tex_processed, result.stats.tex_success,
+            result.stats.image_count, result.stats.video_count
+        ));
 
         out::subtitle("Results");
         out::stat("TEX Processed", result.stats.tex_processed);

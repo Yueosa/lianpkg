@@ -23,10 +23,6 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub debug: bool,
 
-    /// 静默模式（只输出结果）
-    #[arg(short, long, global = true)]
-    pub quiet: bool,
-
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -90,7 +86,7 @@ pub struct WallpaperArgs {
     pub preview: bool,
 
     /// 详细预览（显示完整元数据）
-    #[arg(short = 'V', long)]
+    #[arg(short = 'v', long)]
     pub verbose: bool,
 }
 
@@ -113,7 +109,7 @@ pub struct PkgArgs {
     pub preview: bool,
 
     /// 详细预览
-    #[arg(short = 'V', long)]
+    #[arg(short = 'v', long)]
     pub verbose: bool,
 }
 
@@ -136,7 +132,7 @@ pub struct TexArgs {
     pub preview: bool,
 
     /// 详细预览
-    #[arg(short = 'V', long)]
+    #[arg(short = 'v', long)]
     pub verbose: bool,
 }
 
@@ -168,10 +164,6 @@ pub struct AutoArgs {
     #[arg(long = "no-raw")]
     pub no_raw: bool,
 
-    /// 跳过 PKG 解包
-    #[arg(long = "no-pkg")]
-    pub no_pkg: bool,
-
     /// 跳过 TEX 转换
     #[arg(long = "no-tex")]
     pub no_tex: bool,
@@ -195,6 +187,10 @@ pub struct AutoArgs {
     /// 仅显示计划执行的操作（不实际执行）
     #[arg(short = 'n', long)]
     pub dry_run: bool,
+
+    /// 精简输出模式（只显示关键信息）
+    #[arg(short = 'q', long)]
+    pub quiet: bool,
 }
 
 // ============================================================================

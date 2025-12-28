@@ -9,15 +9,19 @@ use lianpkg::core::path;
 /// 执行 wallpaper 命令
 pub fn run(args: &WallpaperArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     // 加载配置
+    out::debug_api_enter("native", "init_config", &format!("config_path={:?}", config_path));
     let use_exe_dir = config_path.is_none();  // 无配置路径时 Windows 优先使用 exe 目录
     let init_result = native::init_config(native::InitConfigInput {
         config_dir: config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf()),
         use_exe_dir,
     });
+    out::debug_api_return(&format!("config_path={}", init_result.config_path.display()));
 
+    out::debug_api_enter("native", "load_config", &format!("path={}", init_result.config_path.display()));
     let config_result = native::load_config(native::LoadConfigInput {
         config_path: init_result.config_path.clone(),
     });
+    out::debug_api_return(&format!("loaded={}", config_result.config.is_some()));
 
     let config = config_result.config
         .ok_or("Failed to load config")?;
@@ -59,6 +63,12 @@ pub fn run(args: &WallpaperArgs, config_path: Option<PathBuf>) -> Result<(), Str
     let _ = path::ensure_dir(&raw_output);
     let _ = path::ensure_dir(&pkg_temp);
 
+    out::debug_api_enter("paper", "copy_wallpapers", &format!(
+        "ids={:?}, workshop={}, enable_raw={}",
+        args.ids.as_ref().map(|v| v.len()),
+        workshop_path.display(),
+        enable_raw
+    ));
     let result = paper::copy_wallpapers(paper::CopyWallpapersInput {
         wallpaper_ids: args.ids.clone(),
         workshop_path,
@@ -68,8 +78,13 @@ pub fn run(args: &WallpaperArgs, config_path: Option<PathBuf>) -> Result<(), Str
     });
 
     if !result.success {
+        out::debug_api_error(&result.error.as_deref().unwrap_or("Unknown error"));
         return Err(result.error.unwrap_or_else(|| "Unknown error".to_string()));
     }
+    out::debug_api_return(&format!(
+        "raw={}, pkg={}, skipped={}",
+        result.stats.raw_copied, result.stats.pkg_copied, result.stats.skipped
+    ));
 
     // 输出结果
     out::subtitle("Results");
@@ -89,13 +104,19 @@ fn run_preview(workshop_path: &PathBuf, verbose: bool, ids: Option<&Vec<String>>
     out::path_info("Workshop", workshop_path);
     println!();
 
+    out::debug_api_enter("paper", "scan_wallpapers", &format!("path={}", workshop_path.display()));
     let result = paper::scan_wallpapers(paper::ScanWallpapersInput {
         workshop_path: workshop_path.clone(),
     });
 
     if !result.success {
+        out::debug_api_error(&result.error.as_deref().unwrap_or("Failed to scan"));
         return Err(result.error.unwrap_or_else(|| "Failed to scan".to_string()));
     }
+    out::debug_api_return(&format!(
+        "total={}, pkg={}, raw={}",
+        result.stats.total_count, result.stats.pkg_count, result.stats.raw_count
+    ));
 
     // 过滤壁纸（如果指定了 ids）
     let wallpapers: Vec<_> = match ids {
@@ -152,9 +173,10 @@ fn run_preview(workshop_path: &PathBuf, verbose: bool, ids: Option<&Vec<String>>
         }
     } else {
         // 简洁模式：表格
+        // ID 列不截断，使用完整宽度
         out::table_header(&[
-            ("ID", 12),
-            ("Title", 30),
+            ("ID", 14),
+            ("Title", 28),
             ("Type", 8),
             ("PKG", 15),
         ]);
@@ -169,8 +191,8 @@ fn run_preview(workshop_path: &PathBuf, verbose: bool, ids: Option<&Vec<String>>
             };
 
             out::table_row(&[
-                (&wp.wallpaper_id, 12),
-                (title, 30),
+                (&wp.wallpaper_id, 14),  // ID 完整显示
+                (title, 28),
                 (wtype, 8),
                 (&pkg_info, 15),
             ]);

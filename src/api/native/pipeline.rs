@@ -55,8 +55,6 @@ pub struct PipelineOverrides {
     pub clean_unpacked: Option<bool>,
     /// 覆盖 incremental
     pub incremental: Option<bool>,
-    /// 覆盖 auto_unpack_pkg
-    pub auto_unpack_pkg: Option<bool>,
     /// 覆盖 auto_convert_tex
     pub auto_convert_tex: Option<bool>,
 }
@@ -187,9 +185,6 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
         }
         if let Some(inc) = overrides.incremental {
             config.pipeline.incremental = inc;
-        }
-        if let Some(unpack) = overrides.auto_unpack_pkg {
-            config.pipeline.auto_unpack_pkg = unpack;
         }
         if let Some(convert) = overrides.auto_convert_tex {
             config.pipeline.auto_convert_tex = convert;
