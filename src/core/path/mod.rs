@@ -30,6 +30,8 @@ pub use utl::get_unique_output_path;
 pub use cfg::default_config_dir;
 pub use cfg::default_config_toml_path;
 pub use cfg::default_state_json_path;
+pub use cfg::exe_dir;
+pub use cfg::exe_config_dir;
 
 // ============================================================================
 // 导出 Steam/Workshop 路径接口
