@@ -216,6 +216,20 @@ pub fn run(args: &AutoArgs, config_path: Option<PathBuf>) -> Result<(), String> 
         None
     };
 
+    // ========== 阶段7.5: 复制元数据到 tex_converted ==========
+    if tex_result.is_some() {
+        if !args.quiet {
+            out::progress("Copying metadata...", 70, 100);
+        }
+        out::debug_api_enter("metadata", "copy_to_tex_converted", &format!(
+            "source={}, dest={}",
+            config.workshop_path.display(),
+            config.unpacked_output_path.display()
+        ));
+        copy_metadata_to_tex_converted(&config);
+        out::debug_api_return("done");
+    }
+
     // ========== 阶段8: 清理 ==========
     if config.clean_pkg_temp {
         if !args.quiet {
@@ -359,6 +373,70 @@ fn cleanup_unpacked(unpacked_path: &PathBuf) {
                             } else {
                                 std::fs::remove_file(&sub_path)
                             };
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 将 project.json、preview 等元数据文件复制到对应的 tex_converted 目录
+/// 
+/// - 源：workshop_path/壁纸ID/project.json
+/// - 目标：Pkg_Unpacked/壁纸ID/tex_converted/project.json
+fn copy_metadata_to_tex_converted(config: &native::RuntimeConfig) {
+    use std::fs;
+    
+    let workshop_path = &config.workshop_path;
+    let unpacked_path = &config.unpacked_output_path;
+    
+    // 遍历 Pkg_Unpacked 目录下的所有壁纸目录
+    if let Ok(entries) = fs::read_dir(unpacked_path) {
+        for entry in entries.flatten() {
+            let wallpaper_dir = entry.path();
+            if !wallpaper_dir.is_dir() {
+                continue;
+            }
+            
+            // 获取壁纸 ID（目录名）
+            let wallpaper_id = match wallpaper_dir.file_name().and_then(|n| n.to_str()) {
+                Some(name) => name.to_string(),
+                None => continue,
+            };
+            
+            // 检查是否有 tex_converted 子目录
+            let tex_dest_dir = wallpaper_dir.join("tex_converted");
+            if !tex_dest_dir.exists() {
+                continue;
+            }
+            
+            // 源壁纸目录（Steam Workshop）
+            let source_dir = workshop_path.join(&wallpaper_id);
+            if !source_dir.exists() {
+                continue;
+            }
+            
+            // 基础元数据文件（总是尝试复制）
+            let base_files = ["project.json", "scene.json"];
+            for filename in &base_files {
+                let src = source_dir.join(filename);
+                if src.exists() {
+                    let dest = tex_dest_dir.join(filename);
+                    let _ = fs::copy(&src, &dest);
+                }
+            }
+            
+            // 从 project.json 读取预览图文件名
+            let project_path = source_dir.join("project.json");
+            if let Ok(content) = fs::read_to_string(&project_path) {
+                if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) {
+                    // 复制 preview 字段指定的文件
+                    if let Some(preview) = meta.get("preview").and_then(|v| v.as_str()) {
+                        let src = source_dir.join(preview);
+                        if src.exists() {
+                            let dest = tex_dest_dir.join(preview);
+                            let _ = fs::copy(&src, &dest);
                         }
                     }
                 }
