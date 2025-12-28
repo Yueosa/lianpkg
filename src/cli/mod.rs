@@ -46,12 +46,13 @@ pub fn run() {
             // Windows 下无参数时，默认执行 auto 模式
             #[cfg(target_os = "windows")]
             {
-                if !cli.quiet {
-                    output::info("No command specified, running in auto mode...");
-                    println!();
+                if let Some(Command::Auto(ref auto_args)) = cli.command {
+                    if !auto_args.quiet {
+                        output::info("No command specified, running in auto mode...");
+                        println!();
+                    }
+                    handlers::auto::run(auto_args, config_path)
                 }
-                let auto_args = args::AutoArgs::default();
-                handlers::auto::run(&auto_args, config_path)
             }
             #[cfg(not(target_os = "windows"))]
             {
