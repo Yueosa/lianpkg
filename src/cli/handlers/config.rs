@@ -17,6 +17,7 @@ pub fn run(args: &ConfigArgs, config_path: Option<PathBuf>) -> Result<(), String
 
     let init_result = native::init_config(native::InitConfigInput {
         config_dir,
+        use_exe_dir: config_path.is_none(),
     });
 
     match &args.command {

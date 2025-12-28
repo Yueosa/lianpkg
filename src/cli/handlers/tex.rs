@@ -10,8 +10,10 @@ use lianpkg::core::path;
 /// 执行 tex 命令
 pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     // 加载配置
+    let use_exe_dir = config_path.is_none();
     let init_result = native::init_config(native::InitConfigInput {
         config_dir: config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf()),
+        use_exe_dir,
     });
 
     let config_result = native::load_config(native::LoadConfigInput {

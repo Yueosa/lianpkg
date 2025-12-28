@@ -9,62 +9,66 @@ use lianpkg::core::paper as core_paper;
 /// 执行 auto 命令
 pub fn run(args: &AutoArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     // 加载配置
+    let use_exe_dir = config_path.is_none();  // 双击 exe 时使用 exe 目录
     let init_result = native::init_config(native::InitConfigInput {
         config_dir: config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf()),
+        use_exe_dir,
     });
 
     let config_result = native::load_config(native::LoadConfigInput {
         config_path: init_result.config_path.clone(),
     });
 
-    let mut config = config_result.config
+    let config = config_result.config
         .ok_or("Failed to load config")?;
 
-    // 应用命令行参数覆盖
-    if let Some(ref p) = args.search {
-        config.workshop_path = p.clone();
-    }
-    if let Some(ref p) = args.raw_output {
-        config.raw_output_path = p.clone();
-    }
-    if let Some(ref p) = args.pkg_temp {
-        config.pkg_temp_path = p.clone();
-    }
-    if let Some(ref p) = args.unpacked_output {
-        config.unpacked_output_path = p.clone();
-    }
-    if let Some(ref p) = args.tex_output {
-        config.converted_output_path = Some(p.clone());
-    }
-
-    // 行为控制
-    if args.no_raw {
-        config.enable_raw_output = false;
-    }
-    if args.no_clean_temp {
-        config.clean_pkg_temp = false;
-    }
-    if args.no_clean_unpacked {
-        config.clean_unpacked = false;
-    }
-    
-    // 流水线控制
-    config.pipeline.incremental = args.incremental;
-    config.pipeline.auto_unpack_pkg = !args.no_pkg;
-    config.pipeline.auto_convert_tex = !args.no_tex;
+    // 构建参数覆盖（CLI 参数优先级高于配置文件）
+    let overrides = pipeline::PipelineOverrides {
+        workshop_path: args.search.clone(),
+        raw_output_path: args.raw_output.clone(),
+        pkg_temp_path: args.pkg_temp.clone(),
+        unpacked_output_path: args.unpacked_output.clone(),
+        tex_output_path: args.tex_output.clone(),
+        enable_raw: if args.no_raw { Some(false) } else { None },
+        clean_pkg_temp: if args.no_clean_temp { Some(false) } else { None },
+        clean_unpacked: if args.no_clean_unpacked { Some(false) } else { None },
+        incremental: if args.incremental { Some(true) } else { None },
+        auto_unpack_pkg: if args.no_pkg { Some(false) } else { None },
+        auto_convert_tex: if args.no_tex { Some(false) } else { None },
+    };
 
     // dry-run 模式
     if args.dry_run {
-        return run_dry_run(&config, &args, &init_result.state_path);
+        // dry_run 需要应用覆盖后的配置
+        let mut dry_config = config.clone();
+        apply_overrides(&mut dry_config, &overrides);
+        return run_dry_run(&dry_config, &args, &init_result.state_path);
     }
 
-    // 显示配置
+    // 显示配置（应用覆盖后）
+    let mut display_config = config.clone();
+    apply_overrides(&mut display_config, &overrides);
+    
     out::title("Auto Mode");
-    show_config(&config);
+    
+    // Debug: 显示配置文件路径
+    out::debug_verbose("Config", &init_result.config_path.display().to_string());
+    out::debug_verbose("State", &init_result.state_path.display().to_string());
+    
+    // 调试：显示过滤的 ID
+    if let Some(ref ids) = args.ids {
+        out::info(&format!("Filtering wallpapers: {} IDs specified", ids.len()));
+        for id in ids {
+            out::info(&format!("  - {}", id));
+        }
+        println!();
+    }
+    
+    show_config(&display_config);
     println!();
 
     // 磁盘空间预估
-    estimate_disk_usage(&config)?;
+    estimate_disk_usage(&display_config)?;
 
     // 执行流水线
     out::subtitle("Executing Pipeline");
@@ -73,8 +77,10 @@ pub fn run(args: &AutoArgs, config_path: Option<PathBuf>) -> Result<(), String> 
         config,
         state_path: init_result.state_path,
         wallpaper_ids: args.ids.clone(),
+        overrides: Some(overrides),
         progress_callback: Some(progress_callback),
     });
+
 
     out::clear_progress();
     println!();
@@ -326,4 +332,41 @@ fn progress_callback(progress: pipeline::PipelineProgress) {
     };
     
     out::progress(&label, progress.progress as usize, 100);
+}
+
+/// 应用参数覆盖到配置（用于 dry-run 和显示）
+fn apply_overrides(config: &mut native::RuntimeConfig, overrides: &pipeline::PipelineOverrides) {
+    if let Some(ref p) = overrides.workshop_path {
+        config.workshop_path = p.clone();
+    }
+    if let Some(ref p) = overrides.raw_output_path {
+        config.raw_output_path = p.clone();
+    }
+    if let Some(ref p) = overrides.pkg_temp_path {
+        config.pkg_temp_path = p.clone();
+    }
+    if let Some(ref p) = overrides.unpacked_output_path {
+        config.unpacked_output_path = p.clone();
+    }
+    if let Some(ref p) = overrides.tex_output_path {
+        config.converted_output_path = Some(p.clone());
+    }
+    if let Some(enable) = overrides.enable_raw {
+        config.enable_raw_output = enable;
+    }
+    if let Some(clean) = overrides.clean_pkg_temp {
+        config.clean_pkg_temp = clean;
+    }
+    if let Some(clean) = overrides.clean_unpacked {
+        config.clean_unpacked = clean;
+    }
+    if let Some(inc) = overrides.incremental {
+        config.pipeline.incremental = inc;
+    }
+    if let Some(unpack) = overrides.auto_unpack_pkg {
+        config.pipeline.auto_unpack_pkg = unpack;
+    }
+    if let Some(convert) = overrides.auto_convert_tex {
+        config.pipeline.auto_convert_tex = convert;
+    }
 }

@@ -16,6 +16,7 @@ pub fn run(args: &StatusArgs, config_path: Option<PathBuf>) -> Result<(), String
 
     let init_result = native::init_config(native::InitConfigInput {
         config_dir,
+        use_exe_dir: config_path.is_none(),
     });
 
     // 清除状态
