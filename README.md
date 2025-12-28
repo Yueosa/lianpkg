@@ -53,7 +53,7 @@ cargo build --release
 | 平台    | 配置路径                        |
 | ------- | ------------------------------- |
 | Linux   | `~/.config/lianpkg/config.toml` |
-| Windows | `%APPDATA%\lianpkg\config.toml` |
+| Windows | `exe路径\config\config.toml`    |
 
 配置优先级：**命令行参数** > `config.toml` > **默认值**
 
@@ -117,14 +117,14 @@ lianpkg wallpaper [OPTIONS] [PATH]
 - `[PATH]` — 壁纸源目录（默认从配置读取）
 
 **选项**：
-| 选项                | 说明                             |
-| ------------------- | -------------------------------- |
-| `--raw-out <PATH>`  | 原始壁纸输出路径                 |
-| `--pkg-temp <PATH>` | PKG 临时输出路径                 |
-| `--no-raw`          | 跳过原始壁纸复制（只提取 PKG）   |
-| `--ids <IDS>`       | 只处理指定壁纸 ID（逗号分隔）    |
-| `--preview`         | 预览模式（列出壁纸，不执行复制） |
-| `-V, --verbose`     | 详细预览（显示完整元数据）       |
+| 短格式 | 长格式              | 说明                             |
+| ------ | ------------------- | -------------------------------- |
+| `-r`   | `--raw-out <PATH>`  | 原始壁纸输出路径                 |
+| `-t`   | `--pkg-temp <PATH>` | PKG 临时输出路径                 |
+|        | `--no-raw`          | 跳过原始壁纸复制（只提取 PKG）   |
+| `-i`   | `--ids <IDS>`       | 只处理指定壁纸 ID（逗号分隔）    |
+| `-p`   | `--preview`         | 预览模式（列出壁纸，不执行复制） |
+| `-V`   | `--verbose`         | 详细预览（显示完整元数据）       |
 
 **示例**：
 ```bash
@@ -133,9 +133,11 @@ lianpkg wallpaper --preview
 
 # 只提取特定壁纸
 lianpkg wallpaper --ids 123456789,987654321
+# 或使用短格式
+lianpkg w -i 123456789,987654321
 
 # 自定义输出路径
-lianpkg wallpaper --raw-out ~/wallpapers/raw --pkg-temp ~/wallpapers/pkg
+lianpkg wallpaper -r ~/wallpapers/raw -t ~/wallpapers/pkg
 ```
 
 ---
@@ -152,11 +154,11 @@ lianpkg pkg [OPTIONS] [PATH]
 - `[PATH]` — 输入路径（.pkg 文件、壁纸目录或 Pkg_Temp 目录）
 
 **选项**：
-| 选项                  | 说明                              |
-| --------------------- | --------------------------------- |
-| `-o, --output <PATH>` | 解包输出路径                      |
-| `--preview`           | 预览模式（显示 PKG 内容，不解包） |
-| `-V, --verbose`       | 详细预览                          |
+| 短格式 | 长格式            | 说明                              |
+| ------ | ----------------- | --------------------------------- |
+| `-o`   | `--output <PATH>` | 解包输出路径                      |
+| `-p`   | `--preview`       | 预览模式（显示 PKG 内容，不解包） |
+| `-V`   | `--verbose`       | 详细预览                          |
 
 **示例**：
 ```bash
@@ -164,10 +166,10 @@ lianpkg pkg [OPTIONS] [PATH]
 lianpkg pkg ./scene.pkg -o ./output
 
 # 预览 PKG 内容
-lianpkg pkg ./scene.pkg --preview -V
+lianpkg pkg ./scene.pkg -p -V
 
 # 批量解包目录
-lianpkg pkg ~/wallpapers/pkg_temp
+lianpkg p ~/wallpapers/pkg_temp
 ```
 
 ---
@@ -184,11 +186,11 @@ lianpkg tex [OPTIONS] [PATH]
 - `[PATH]` — 输入路径（.tex 文件或包含 .tex 的目录）
 
 **选项**：
-| 选项                  | 说明                                                      |
-| --------------------- | --------------------------------------------------------- |
-| `-o, --output <PATH>` | 转换输出路径（默认在源文件同级生成 `tex_converted` 目录） |
-| `--preview`           | 预览模式（显示 TEX 格式信息，不转换）                     |
-| `-V, --verbose`       | 详细预览                                                  |
+| 短格式 | 长格式            | 说明                                                      |
+| ------ | ----------------- | --------------------------------------------------------- |
+| `-o`   | `--output <PATH>` | 转换输出路径（默认在源文件同级生成 `tex_converted` 目录） |
+| `-p`   | `--preview`       | 预览模式（显示 TEX 格式信息，不转换）                     |
+| `-V`   | `--verbose`       | 详细预览                                                  |
 
 **示例**：
 ```bash
@@ -196,7 +198,7 @@ lianpkg tex [OPTIONS] [PATH]
 lianpkg tex ./texture.tex
 
 # 预览 TEX 格式信息
-lianpkg tex ./texture.tex --preview -V
+lianpkg t ./texture.tex -p -V
 
 # 批量转换目录
 lianpkg tex ~/wallpapers/unpacked -o ~/wallpapers/images
@@ -213,42 +215,47 @@ lianpkg auto [OPTIONS]
 ```
 
 **路径选项**：
-| 选项                    | 说明             |
-| ----------------------- | ---------------- |
-| `--search <PATH>`       | 壁纸源目录       |
-| `--raw-out <PATH>`      | 原始壁纸输出目录 |
-| `--pkg-temp <PATH>`     | PKG 临时目录     |
-| `--unpacked-out <PATH>` | 解包输出目录     |
-| `--tex-out <PATH>`      | TEX 转换输出目录 |
+| 短格式 | 长格式                  | 说明             |
+| ------ | ----------------------- | ---------------- |
+| `-s`   | `--search <PATH>`       | 壁纸源目录       |
+| `-r`   | `--raw-out <PATH>`      | 原始壁纸输出目录 |
+| `-t`   | `--pkg-temp <PATH>`     | PKG 临时目录     |
+| `-u`   | `--unpacked-out <PATH>` | 解包输出目录     |
+| `-o`   | `--tex-out <PATH>`      | TEX 转换输出目录 |
 
 **行为选项**：
-| 选项                  | 说明                          |
-| --------------------- | ----------------------------- |
-| `--no-raw`            | 跳过原始壁纸提取              |
-| `--no-pkg`            | 跳过 PKG 解包                 |
-| `--no-tex`            | 跳过 TEX 转换                 |
-| `--no-clean-temp`     | 保留 PKG 临时目录             |
-| `--no-clean-unpacked` | 保留解包中间产物              |
-| `--incremental`       | 增量处理（跳过已处理的壁纸）  |
-| `--ids <IDS>`         | 只处理指定壁纸 ID（逗号分隔） |
-| `--dry-run`           | 仅显示计划，不执行            |
+| 短格式 | 长格式                | 说明                          |
+| ------ | --------------------- | ----------------------------- |
+|        | `--no-raw`            | 跳过原始壁纸提取              |
+|        | `--no-pkg`            | 跳过 PKG 解包                 |
+|        | `--no-tex`            | 跳过 TEX 转换                 |
+|        | `--no-clean-temp`     | 保留 PKG 临时目录             |
+|        | `--no-clean-unpacked` | 保留解包中间产物              |
+| `-I`   | `--incremental`       | 增量处理（跳过已处理的壁纸）  |
+| `-i`   | `--ids <IDS>`         | 只处理指定壁纸 ID（逗号分隔） |
+| `-n`   | `--dry-run`           | 仅显示计划，不执行            |
 
 **示例**：
 ```bash
 # 一键处理所有壁纸
 lianpkg auto
+# 或使用短命令
+lianpkg a
 
 # 预览执行计划
-lianpkg auto --dry-run
+lianpkg auto -n
 
 # 增量处理新壁纸
-lianpkg auto --incremental
+lianpkg auto -I
 
 # 只处理特定壁纸
-lianpkg auto --ids 123456789
+lianpkg a -i 123456789
 
 # 保留中间文件用于调试
 lianpkg auto --no-clean-temp --no-clean-unpacked
+
+# 自定义输出路径
+lianpkg auto -s ~/workshop -o ~/output/converted
 ```
 
 ---
