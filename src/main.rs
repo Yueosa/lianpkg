@@ -5,5 +5,8 @@ mod cli;
 extern "C" {}
 
 fn main() {
-    cli::run();
+    if let Err(e) = cli::run() {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
 }

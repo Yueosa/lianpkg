@@ -11,7 +11,7 @@ use clap::Parser;
 use args::{Cli, Command};
 
 /// CLI 入口函数
-pub fn run() {
+pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     // 设置调试模式
@@ -46,13 +46,10 @@ pub fn run() {
             // Windows 下无参数时，默认执行 auto 模式
             #[cfg(target_os = "windows")]
             {
-                if let Some(Command::Auto(ref auto_args)) = cli.command {
-                    if !auto_args.quiet {
-                        output::info("No command specified, running in auto mode...");
-                        println!();
-                    }
-                    handlers::auto::run(auto_args, config_path)
-                }
+                output::info("No command specified, running in auto mode...");
+                println!();
+                let auto_args = args::AutoArgs::default();
+                handlers::auto::run(&auto_args, config_path)
             }
             #[cfg(not(target_os = "windows"))]
             {
@@ -73,5 +70,6 @@ pub fn run() {
 
     // Windows 下等待用户确认（显示配置文件路径）
     output::press_enter_to_exit_with_config(config_path_for_display.as_deref());
+    Ok(())
 }
 
