@@ -1,62 +1,49 @@
-//! 文件扫描与项目定位
+//! 文件扫描
 
+use super::types::*;
+use crate::core::error::CoreResult;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// 获取目标文件列表
-/// 支持文件或目录输入，递归扫描 .pkg 和 .tex 文件
-pub fn get_target_files(path: &Path) -> Vec<PathBuf> {
+/// 扫描目标文件
+///
+/// 支持文件或目录输入，递归扫描指定扩展名的文件
+pub fn scan_files(input: ScanFilesInput) -> CoreResult<ScanFilesOutput> {
     let mut files = Vec::new();
 
-    if path.is_file() {
-        files.push(path.to_path_buf());
-    } else if path.is_dir() {
-        visit_dirs(path, &mut files);
-    }
-    
-    files
-}
+    let extensions: Vec<String> = input
+        .extensions
+        .unwrap_or_else(|| vec!["pkg".to_string(), "tex".to_string()]);
 
-/// 查找项目根目录
-/// 向上遍历查找包含 project.json 或 scene.json 的目录
-pub fn find_project_root(path: &Path) -> Option<PathBuf> {
-    let mut current = path.parent();
-    
-    while let Some(p) = current {
-        // 检查项目标识文件
-        if p.join("project.json").exists() || p.join("scene.json").exists() {
-            return Some(p.to_path_buf());
-        }
-        
-        // 检查 materials 目录结构
-        if p.join("materials").is_dir() {
-            if path.starts_with(p.join("materials")) {
-                return Some(p.to_path_buf());
+    if input.path.is_file() {
+        // 单文件：检查扩展名
+        if let Some(ext) = input.path.extension() {
+            let ext_str: String = ext.to_string_lossy().to_lowercase();
+            if extensions
+                .iter()
+                .any(|e: &String| e.to_lowercase() == ext_str)
+            {
+                files.push(input.path);
             }
         }
-
-        // 到达文件系统根目录
-        if p.parent().is_none() {
-            break;
-        }
-        
-        current = p.parent();
+    } else if input.path.is_dir() {
+        visit_dirs(&input.path, &mut files, &extensions);
     }
-    
-    None
+
+    Ok(ScanFilesOutput { files })
 }
 
-/// 递归遍历目录，收集 .pkg 和 .tex 文件
-fn visit_dirs(dir: &Path, files: &mut Vec<PathBuf>) {
+/// 递归遍历目录，收集指定扩展名的文件
+fn visit_dirs(dir: &Path, files: &mut Vec<PathBuf>, extensions: &[String]) {
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            
+
             if path.is_dir() {
-                visit_dirs(&path, files);
+                visit_dirs(&path, files, extensions);
             } else if let Some(ext) = path.extension() {
                 let ext_str = ext.to_string_lossy().to_lowercase();
-                if ext_str == "pkg" || ext_str == "tex" {
+                if extensions.iter().any(|e| e.to_lowercase() == ext_str) {
                     files.push(path);
                 }
             }

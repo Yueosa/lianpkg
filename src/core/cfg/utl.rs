@@ -1,7 +1,7 @@
 //! 工具函数与默认值定义
 
 use std::path::Path;
-use std::fs;
+
 use crate::core::path;
 
 /// 转义路径字符串用于 TOML（Windows 反斜杠需要转义）
@@ -21,7 +21,8 @@ pub fn default_config_template() -> String {
     let clean_unpacked = true;
     let converted_hint = String::new();
 
-    format!(r#"# === LianPkg Configuration File / LianPkg 配置文件 ===
+    format!(
+        r#"# === LianPkg Configuration File / LianPkg 配置文件 ===
 #
 # 路径格式说明 / Path Format:
 #   - 在此配置文件中，Windows 路径的反斜杠需要转义: C:\\Users\\Name\\...
@@ -93,7 +94,8 @@ auto_unpack_pkg = true
 # === 是否在流水线中自动执行 tex 转换 ===
 #     Default/默认: true
 auto_convert_tex = true
-"#)
+"#
+    )
 }
 
 /// 生成 state.json 的默认模板内容
@@ -102,7 +104,8 @@ pub fn default_state_template() -> String {
 }
 
 /// 确保目录存在，不存在则递归创建
-pub fn ensure_dir(path: &Path) -> Result<(), String> {
-    fs::create_dir_all(path)
-        .map_err(|e| format!("Failed to create dir {}: {}", path.display(), e))
+pub fn ensure_dir(path: &Path) -> crate::core::error::CoreResult<()> {
+    std::fs::create_dir_all(path).map_err(|e| {
+        crate::core::error::CoreError::io_with_path(e.to_string(), path.display().to_string())
+    })
 }

@@ -3,9 +3,9 @@
 //! 封装 core::paper 的底层操作，提供更友好的 API。
 //! 支持扫描、预览、复制等操作。
 
-use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
 use crate::core::paper;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 // ============================================================================
 // 结构体定义
@@ -131,22 +131,23 @@ pub struct CopyStats {
 // ============================================================================
 
 /// 扫描 Workshop 目录下的所有壁纸
-/// 
+///
 /// 返回壁纸列表及其基本信息，用于预览和选择
 pub fn scan_wallpapers(input: ScanWallpapersInput) -> ScanWallpapersOutput {
     // 列出所有目录
-    let list_result = paper::list_dirs(paper::ListDirsInput {
+    let list_result = match paper::list_dirs(paper::ListDirsInput {
         path: input.workshop_path.clone(),
-    });
-
-    if !list_result.success {
-        return ScanWallpapersOutput {
-            success: false,
-            wallpapers: vec![],
-            stats: ScanStats::default(),
-            error: Some("Failed to list wallpaper directories".to_string()),
-        };
-    }
+    }) {
+        Ok(r) => r,
+        Err(e) => {
+            return ScanWallpapersOutput {
+                success: false,
+                wallpapers: vec![],
+                stats: ScanStats::default(),
+                error: Some(format!("Failed to list wallpaper directories: {}", e)),
+            };
+        }
+    };
 
     let mut wallpapers = Vec::new();
     let mut stats = ScanStats::default();
@@ -154,20 +155,16 @@ pub fn scan_wallpapers(input: ScanWallpapersInput) -> ScanWallpapersOutput {
     for dir_name in list_result.dirs {
         let folder_path = input.workshop_path.join(&dir_name);
 
-        // 读取元数据
-        let meta_result = paper::read_meta(paper::ReadMetaInput {
+        // 读取元数据（失败时使用默认值）
+        let (title, wallpaper_type, preview_path) = match paper::read_meta(paper::ReadMetaInput {
             folder: folder_path.clone(),
-        });
-
-        let (title, wallpaper_type, preview_path) = if meta_result.success {
-            let meta = meta_result.meta.unwrap_or_default();
-            (
-                meta.title,
-                meta.wallpaper_type,
-                meta.preview.map(|p| folder_path.join(p)),
-            )
-        } else {
-            (None, None, None)
+        }) {
+            Ok(r) => (
+                r.meta.title,
+                r.meta.wallpaper_type,
+                r.meta.preview.map(|p| folder_path.join(p)),
+            ),
+            Err(_) => (None, None, None),
         };
 
         // 检查 pkg 文件
@@ -205,7 +202,7 @@ pub fn scan_wallpapers(input: ScanWallpapersInput) -> ScanWallpapersOutput {
 }
 
 /// 复制壁纸到目标目录
-/// 
+///
 /// 可以选择复制全部或指定的壁纸
 pub fn copy_wallpapers(input: CopyWallpapersInput) -> CopyWallpapersOutput {
     // 先扫描获取壁纸列表
@@ -224,7 +221,9 @@ pub fn copy_wallpapers(input: CopyWallpapersInput) -> CopyWallpapersOutput {
 
     // 筛选要处理的壁纸
     let wallpapers_to_process: Vec<_> = match &input.wallpaper_ids {
-        Some(ids) => scan_result.wallpapers.into_iter()
+        Some(ids) => scan_result
+            .wallpapers
+            .into_iter()
             .filter(|w| ids.contains(&w.wallpaper_id))
             .collect(),
         None => scan_result.wallpapers,
@@ -275,29 +274,25 @@ pub fn copy_wallpapers(input: CopyWallpapersInput) -> CopyWallpapersOutput {
 
 /// 获取单个壁纸详情
 pub fn get_wallpaper_detail(
-    workshop_path: &PathBuf,
+    workshop_path: &std::path::Path,
     wallpaper_id: &str,
 ) -> Option<WallpaperInfo> {
     let folder_path = workshop_path.join(wallpaper_id);
-    
+
     if !folder_path.exists() || !folder_path.is_dir() {
         return None;
     }
 
-    // 读取元数据
-    let meta_result = paper::read_meta(paper::ReadMetaInput {
+    // 读取元数据（失败时使用默认值）
+    let (title, wallpaper_type, preview_path) = match paper::read_meta(paper::ReadMetaInput {
         folder: folder_path.clone(),
-    });
-
-    let (title, wallpaper_type, preview_path) = if meta_result.success {
-        let meta = meta_result.meta.unwrap_or_default();
-        (
-            meta.title,
-            meta.wallpaper_type,
-            meta.preview.map(|p| folder_path.join(p)),
-        )
-    } else {
-        (None, None, None)
+    }) {
+        Ok(r) => (
+            r.meta.title,
+            r.meta.wallpaper_type,
+            r.meta.preview.map(|p| folder_path.join(p)),
+        ),
+        Err(_) => (None, None, None),
     };
 
     // 检查 pkg 文件

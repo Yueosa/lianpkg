@@ -41,7 +41,7 @@ pub fn run(args: &StatusArgs, config_path: Option<PathBuf>) -> Result<(), String
 }
 
 /// 显示状态统计
-fn show_status(state: &cfg::StateData, state_path: &PathBuf, full: bool) -> Result<(), String> {
+fn show_status(state: &cfg::StateData, state_path: &std::path::Path, full: bool) -> Result<(), String> {
     out::title("LianPkg Status");
     out::path_info("State File", state_path);
     println!();
@@ -154,7 +154,7 @@ fn list_processed(state: &cfg::StateData) -> Result<(), String> {
 }
 
 /// 清除状态
-fn clear_status(state_path: &PathBuf, yes: bool) -> Result<(), String> {
+fn clear_status(state_path: &std::path::Path, yes: bool) -> Result<(), String> {
     if !yes {
         out::warning("This will clear all processing history");
         if !out::confirm("Are you sure?") {
@@ -164,12 +164,12 @@ fn clear_status(state_path: &PathBuf, yes: bool) -> Result<(), String> {
 
     // 删除状态文件
     let _ = cfg::delete_state_json(cfg::DeleteStateInput {
-        path: state_path.clone(),
+        path: state_path.to_path_buf(),
     });
 
     // 重新创建空状态
     let _ = cfg::create_state_json(cfg::CreateStateInput {
-        path: state_path.clone(),
+        path: state_path.to_path_buf(),
         content: None,
     });
 

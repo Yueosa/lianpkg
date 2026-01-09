@@ -445,15 +445,12 @@ pub fn run_tex_only(
 // ============================================================================
 
 /// 加载或创建状态数据
-fn load_or_create_state(state_path: &PathBuf) -> cfg::StateData {
+fn load_or_create_state(state_path: &std::path::Path) -> cfg::StateData {
     let load_result = native_cfg::load_state(native_cfg::LoadStateInput {
-        state_path: state_path.clone(),
+        state_path: state_path.to_path_buf(),
     });
 
-    match load_result.state {
-        Some(state) => state,
-        None => cfg::StateData::default(),
-    }
+    load_result.state.unwrap_or_default()
 }
 
 /// 复制元数据文件到 tex_converted 目录

@@ -2,10 +2,10 @@
 //!
 //! 封装 core::pkg 的底层操作，提供批量解包等便捷方法。
 
-use std::path::PathBuf;
+use crate::core::{path, pkg};
+use serde::{Deserialize, Serialize};
 use std::fs;
-use serde::{Serialize, Deserialize};
-use crate::core::{pkg, path};
+use std::path::PathBuf;
 
 // ============================================================================
 // 结构体定义
@@ -127,11 +127,11 @@ pub struct PkgFileEntry {
 // ============================================================================
 
 /// 批量解包 PKG 文件
-/// 
+///
 /// 扫描 pkg_temp_path 下所有 .pkg 文件并解包到 unpacked_output_path
 pub fn unpack_all(input: UnpackAllInput) -> UnpackAllOutput {
     // 确保输出目录存在
-    if let Err(e) = path::ensure_dir(&input.unpacked_output_path) {
+    if let Err(e) = path::ensure_dir_compat(&input.unpacked_output_path) {
         return UnpackAllOutput {
             success: false,
             results: vec![],
@@ -159,15 +159,17 @@ pub fn unpack_all(input: UnpackAllInput) -> UnpackAllOutput {
     for pkg_path in pkg_files {
         stats.pkg_processed += 1;
 
-        let pkg_name = pkg_path.file_name()
+        let pkg_name = pkg_path
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
 
         let scene_name = path::scene_name_from_pkg_stem(
-            pkg_path.file_stem()
+            pkg_path
+                .file_stem()
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default()
-                .as_str()
+                .as_str(),
         );
 
         let output_dir = input.unpacked_output_path.join(&scene_name);
@@ -178,46 +180,51 @@ pub fn unpack_all(input: UnpackAllInput) -> UnpackAllOutput {
             output_base: output_dir.clone(),
         });
 
-        if unpack_result.success {
-            stats.pkg_success += 1;
-            
-            let files: Vec<UnpackedFile> = unpack_result.extracted_files.iter()
-                .map(|f| {
-                    let is_tex = f.entry_name.to_lowercase().ends_with(".tex");
-                    if is_tex {
-                        stats.tex_files += 1;
-                    }
-                    stats.total_files += 1;
-                    
-                    UnpackedFile {
-                        name: f.entry_name.clone(),
-                        output_path: f.output_path.clone(),
-                        size: f.size,
-                        is_tex,
-                    }
-                })
-                .collect();
+        match unpack_result {
+            Ok(result) => {
+                stats.pkg_success += 1;
 
-            results.push(UnpackResult {
-                pkg_path,
-                pkg_name,
-                scene_name,
-                output_dir,
-                success: true,
-                files,
-                error: None,
-            });
-        } else {
-            stats.pkg_failed += 1;
-            results.push(UnpackResult {
-                pkg_path,
-                pkg_name,
-                scene_name,
-                output_dir,
-                success: false,
-                files: vec![],
-                error: unpack_result.error,
-            });
+                let files: Vec<UnpackedFile> = result
+                    .extracted_files
+                    .iter()
+                    .map(|f| {
+                        let is_tex = f.entry_name.to_lowercase().ends_with(".tex");
+                        if is_tex {
+                            stats.tex_files += 1;
+                        }
+                        stats.total_files += 1;
+
+                        UnpackedFile {
+                            name: f.entry_name.clone(),
+                            output_path: f.output_path.clone(),
+                            size: f.size,
+                            is_tex,
+                        }
+                    })
+                    .collect();
+
+                results.push(UnpackResult {
+                    pkg_path,
+                    pkg_name,
+                    scene_name,
+                    output_dir,
+                    success: true,
+                    files,
+                    error: None,
+                });
+            }
+            Err(e) => {
+                stats.pkg_failed += 1;
+                results.push(UnpackResult {
+                    pkg_path,
+                    pkg_name,
+                    scene_name,
+                    output_dir,
+                    success: false,
+                    files: vec![],
+                    error: Some(e.to_string()),
+                });
+            }
         }
     }
 
@@ -234,33 +241,25 @@ pub fn unpack_all(input: UnpackAllInput) -> UnpackAllOutput {
 }
 
 /// 预览 PKG 文件内容
-/// 
+///
 /// 不执行解包，只解析显示 PKG 包含的文件列表
 pub fn preview_pkg(input: PreviewPkgInput) -> PreviewPkgOutput {
-    let parse_result = pkg::parse_pkg(pkg::ParsePkgInput {
+    let pkg_info = match pkg::parse_pkg(pkg::ParsePkgInput {
         file_path: input.pkg_path,
-    });
-
-    if !parse_result.success {
-        return PreviewPkgOutput {
-            success: false,
-            pkg_info: None,
-            error: parse_result.error,
-        };
-    }
-
-    let pkg_info = match parse_result.pkg_info {
-        Some(info) => info,
-        None => {
+    }) {
+        Ok(r) => r.pkg_info,
+        Err(e) => {
             return PreviewPkgOutput {
                 success: false,
                 pkg_info: None,
-                error: Some("PKG info is empty".to_string()),
+                error: Some(e.to_string()),
             };
         }
     };
 
-    let files: Vec<PkgFileEntry> = pkg_info.entries.iter()
+    let files: Vec<PkgFileEntry> = pkg_info
+        .entries
+        .iter()
         .map(|e| PkgFileEntry {
             name: e.name.clone(),
             size: e.size,
@@ -283,19 +282,18 @@ pub fn preview_pkg(input: PreviewPkgInput) -> PreviewPkgOutput {
 }
 
 /// 解包单个 PKG 文件
-pub fn unpack_single(
-    pkg_path: PathBuf,
-    output_base: PathBuf,
-) -> UnpackResult {
-    let pkg_name = pkg_path.file_name()
+pub fn unpack_single(pkg_path: PathBuf, output_base: PathBuf) -> UnpackResult {
+    let pkg_name = pkg_path
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
 
     let scene_name = path::scene_name_from_pkg_stem(
-        pkg_path.file_stem()
+        pkg_path
+            .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default()
-            .as_str()
+            .as_str(),
     );
 
     let output_dir = output_base.join(&scene_name);
@@ -305,49 +303,53 @@ pub fn unpack_single(
         output_base: output_dir.clone(),
     });
 
-    if unpack_result.success {
-        let files: Vec<UnpackedFile> = unpack_result.extracted_files.iter()
-            .map(|f| UnpackedFile {
-                name: f.entry_name.clone(),
-                output_path: f.output_path.clone(),
-                size: f.size,
-                is_tex: f.entry_name.to_lowercase().ends_with(".tex"),
-            })
-            .collect();
+    match unpack_result {
+        Ok(result) => {
+            let files: Vec<UnpackedFile> = result
+                .extracted_files
+                .iter()
+                .map(|f| UnpackedFile {
+                    name: f.entry_name.clone(),
+                    output_path: f.output_path.clone(),
+                    size: f.size,
+                    is_tex: f.entry_name.to_lowercase().ends_with(".tex"),
+                })
+                .collect();
 
-        UnpackResult {
-            pkg_path,
-            pkg_name,
-            scene_name,
-            output_dir,
-            success: true,
-            files,
-            error: None,
+            UnpackResult {
+                pkg_path,
+                pkg_name,
+                scene_name,
+                output_dir,
+                success: true,
+                files,
+                error: None,
+            }
         }
-    } else {
-        UnpackResult {
+        Err(e) => UnpackResult {
             pkg_path,
             pkg_name,
             scene_name,
             output_dir,
             success: false,
             files: vec![],
-            error: unpack_result.error,
-        }
+            error: Some(e.to_string()),
+        },
     }
 }
 
 /// 获取解包目录下的所有 TEX 文件
 pub fn get_tex_files_from_unpacked(unpacked_path: &PathBuf) -> Vec<PathBuf> {
     let mut tex_files = Vec::new();
-    
+
     if let Ok(entries) = fs::read_dir(unpacked_path) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
                 // 递归搜索子目录
                 tex_files.extend(get_tex_files_from_unpacked(&path));
-            } else if path.extension()
+            } else if path
+                .extension()
                 .map(|e| e.to_string_lossy().to_lowercase() == "tex")
                 .unwrap_or(false)
             {
@@ -355,7 +357,7 @@ pub fn get_tex_files_from_unpacked(unpacked_path: &PathBuf) -> Vec<PathBuf> {
             }
         }
     }
-    
+
     tex_files
 }
 

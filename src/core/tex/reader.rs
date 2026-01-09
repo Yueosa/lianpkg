@@ -53,8 +53,8 @@ fn read_image_container<R: Read + Seek>(reader: &mut R, _header: &TexHeader) -> 
     let mut is_video_mp4 = false;
     let mut version = 0;
 
-    if magic.starts_with("TEXB") {
-        if let Ok(v) = magic[4..].parse::<i32>() {
+    if let Some(stripped) = magic.strip_prefix("TEXB") {
+        if let Ok(v) = stripped.parse::<i32>() {
             version = v;
         }
     }

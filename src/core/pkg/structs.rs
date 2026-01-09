@@ -1,7 +1,7 @@
 //! 结构体定义 - Input/Output、运行时结构体
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
 
 // ============================================================================
 // Input 结构体
@@ -43,36 +43,24 @@ pub struct UnpackEntryInput {
 /// parse_pkg 接口返回值
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsePkgOutput {
-    /// 是否成功
-    pub success: bool,
-    /// pkg 文件信息，失败时为 None
-    pub pkg_info: Option<PkgInfo>,
-    /// 错误信息，成功时为 None
-    pub error: Option<String>,
+    /// pkg 文件信息
+    pub pkg_info: PkgInfo,
 }
 
 /// unpack_pkg 接口返回值
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnpackPkgOutput {
-    /// 是否成功
-    pub success: bool,
     /// pkg 文件信息
-    pub pkg_info: Option<PkgInfo>,
+    pub pkg_info: PkgInfo,
     /// 解包的文件列表
     pub extracted_files: Vec<ExtractedFile>,
-    /// 错误信息，成功时为 None
-    pub error: Option<String>,
 }
 
 /// unpack_entry 接口返回值
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnpackEntryOutput {
-    /// 是否成功
-    pub success: bool,
     /// 输出路径
     pub output_path: PathBuf,
-    /// 错误信息，成功时为 None
-    pub error: Option<String>,
 }
 
 // ============================================================================

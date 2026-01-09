@@ -1,42 +1,56 @@
 //! TEX 模式处理器
 
-use std::path::PathBuf;
-use std::fs;
 use super::super::args::TexArgs;
 use super::super::output as out;
 use lianpkg::api::native::{self, tex};
 use lianpkg::core::path;
+use std::fs;
+use std::path::PathBuf;
 
 /// 执行 tex 命令
 pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     // 加载配置
-    out::debug_api_enter("native", "init_config", &format!("config_path={:?}", config_path));
+    out::debug_api_enter(
+        "native",
+        "init_config",
+        &format!("config_path={:?}", config_path),
+    );
     let use_exe_dir = config_path.is_none();
     let init_result = native::init_config(native::InitConfigInput {
         config_dir: config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf()),
         use_exe_dir,
     });
-    out::debug_api_return(&format!("config_path={}", init_result.config_path.display()));
+    out::debug_api_return(&format!(
+        "config_path={}",
+        init_result.config_path.display()
+    ));
 
-    out::debug_api_enter("native", "load_config", &format!("path={}", init_result.config_path.display()));
+    out::debug_api_enter(
+        "native",
+        "load_config",
+        &format!("path={}", init_result.config_path.display()),
+    );
     let config_result = native::load_config(native::LoadConfigInput {
         config_path: init_result.config_path.clone(),
     });
     out::debug_api_return(&format!("loaded={}", config_result.config.is_some()));
 
-    let config = config_result.config
-        .ok_or("Failed to load config")?;
+    let config = config_result.config.ok_or("Failed to load config")?;
 
     // 确定路径
-    let input_path = args.path.clone()
+    let input_path = args
+        .path
+        .clone()
         .unwrap_or_else(|| config.unpacked_output_path.clone());
 
-    let output_path = args.output.clone()
-        .or(config.converted_output_path.clone());
+    let output_path = args.output.clone().or(config.converted_output_path.clone());
 
     // 判断输入类型
     if !input_path.exists() {
-        return Err(format!("Input path does not exist: {}", input_path.display()));
+        return Err(format!(
+            "Input path does not exist: {}",
+            input_path.display()
+        ));
     }
 
     // 预览模式
@@ -56,21 +70,28 @@ pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
 
     // 确保输出目录存在
     if let Some(ref out_path) = output_path {
-        let _ = path::ensure_dir(out_path);
+        let _ = path::ensure_dir_compat(out_path);
     }
 
     // 判断是单文件还是目录
     if input_path.is_file() && input_path.extension().map(|e| e == "tex").unwrap_or(false) {
         // 单文件转换
         let out_path = output_path.unwrap_or_else(|| {
-            input_path.parent().unwrap_or(&input_path).join("tex_converted")
+            input_path
+                .parent()
+                .unwrap_or(&input_path)
+                .join("tex_converted")
         });
-        
-        out::debug_api_enter("tex", "convert_single", &format!("input={}", input_path.display()));
+
+        out::debug_api_enter(
+            "tex",
+            "convert_single",
+            &format!("input={}", input_path.display()),
+        );
         let result = tex::convert_single(input_path.clone(), out_path);
-        
+
         if !result.success {
-            out::debug_api_error(&result.error.as_deref().unwrap_or("Unknown error"));
+            out::debug_api_error(result.error.as_deref().unwrap_or("Unknown error"));
             return Err(result.error.unwrap_or_else(|| "Unknown error".to_string()));
         }
         out::debug_api_return(&format!("output={}", result.output_path.display()));
@@ -85,20 +106,26 @@ pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
         out::success("TEX conversion completed!");
     } else {
         // 目录批量转换
-        out::debug_api_enter("tex", "convert_all", &format!("input={}", input_path.display()));
+        out::debug_api_enter(
+            "tex",
+            "convert_all",
+            &format!("input={}", input_path.display()),
+        );
         let result = tex::convert_all(tex::ConvertAllInput {
             unpacked_path: input_path,
             output_path,
         });
 
         if !result.success && result.stats.tex_success == 0 {
-            out::debug_api_error(&result.error.as_deref().unwrap_or("Unknown error"));
+            out::debug_api_error(result.error.as_deref().unwrap_or("Unknown error"));
             return Err(result.error.unwrap_or_else(|| "Unknown error".to_string()));
         }
         out::debug_api_return(&format!(
             "processed={}, success={}, images={}, videos={}",
-            result.stats.tex_processed, result.stats.tex_success,
-            result.stats.image_count, result.stats.video_count
+            result.stats.tex_processed,
+            result.stats.tex_success,
+            result.stats.image_count,
+            result.stats.video_count
         ));
 
         out::subtitle("Results");
@@ -110,7 +137,10 @@ pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
         println!();
 
         if result.stats.tex_failed > 0 {
-            out::warning(&format!("{} TEX files failed to convert", result.stats.tex_failed));
+            out::warning(&format!(
+                "{} TEX files failed to convert",
+                result.stats.tex_failed
+            ));
         }
         out::success("TEX conversion completed!");
     }
@@ -136,13 +166,15 @@ fn run_preview(input_path: &PathBuf, verbose: bool) -> Result<(), String> {
 }
 
 /// 预览单个 TEX 文件
-fn preview_single_tex(tex_path: &PathBuf, verbose: bool) -> Result<(), String> {
+fn preview_single_tex(tex_path: &std::path::Path, verbose: bool) -> Result<(), String> {
     let result = tex::preview_tex(tex::PreviewTexInput {
-        tex_path: tex_path.clone(),
+        tex_path: tex_path.to_path_buf(),
     });
 
     if !result.success {
-        return Err(result.error.unwrap_or_else(|| "Failed to parse TEX".to_string()));
+        return Err(result
+            .error
+            .unwrap_or_else(|| "Failed to parse TEX".to_string()));
     }
 
     let info = result.tex_info.ok_or("TEX info is empty")?;
@@ -155,10 +187,20 @@ fn preview_single_tex(tex_path: &PathBuf, verbose: bool) -> Result<(), String> {
         out::box_line("Size", &format!("{} × {}", info.width, info.height));
         out::box_line("Images", &info.image_count.to_string());
         out::box_line("Mipmaps", &info.mipmap_count.to_string());
-        out::box_line("Compressed", if info.is_compressed { "Yes (LZ4)" } else { "No" });
+        out::box_line(
+            "Compressed",
+            if info.is_compressed {
+                "Yes (LZ4)"
+            } else {
+                "No"
+            },
+        );
         out::box_line("Video", if info.is_video { "Yes" } else { "No" });
         out::box_line("Data Size", &out::format_size(info.data_size as u64));
-        out::box_line("Output", &format!("→ {}", info.recommended_output.to_uppercase()));
+        out::box_line(
+            "Output",
+            &format!("→ {}", info.recommended_output.to_uppercase()),
+        );
         out::box_end();
     } else {
         let filename = tex_path.file_name().unwrap_or_default().to_string_lossy();
@@ -179,7 +221,7 @@ fn preview_single_tex(tex_path: &PathBuf, verbose: bool) -> Result<(), String> {
 /// 预览目录中的所有 TEX
 fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
     let tex_files = find_tex_files(dir_path)?;
-    
+
     if tex_files.is_empty() {
         out::warning("No TEX files found in directory");
         return Ok(());
@@ -192,7 +234,8 @@ fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
         // 详细模式：每个 TEX 单独显示
         for tex_path in &tex_files {
             if let Err(e) = preview_single_tex(tex_path, true) {
-                out::error(&format!("Failed to preview {}: {}", 
+                out::error(&format!(
+                    "Failed to preview {}: {}",
                     tex_path.file_name().unwrap_or_default().to_string_lossy(),
                     e
                 ));
@@ -216,12 +259,10 @@ fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
 
             if result.success {
                 if let Some(info) = result.tex_info {
-                    let filename = tex_path.file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy();
+                    let filename = tex_path.file_name().unwrap_or_default().to_string_lossy();
                     let size = format!("{}×{}", info.width, info.height);
                     let compressed = if info.is_compressed { "✓" } else { "✗" };
-                    
+
                     out::table_row(&[
                         (&filename, 25),
                         (&info.format, 8),
@@ -231,16 +272,8 @@ fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
                     ]);
                 }
             } else {
-                let filename = tex_path.file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy();
-                out::table_row(&[
-                    (&filename, 25),
-                    ("ERROR", 8),
-                    ("-", 12),
-                    ("-", 5),
-                    ("-", 6),
-                ]);
+                let filename = tex_path.file_name().unwrap_or_default().to_string_lossy();
+                out::table_row(&[(&filename, 25), ("ERROR", 8), ("-", 12), ("-", 5), ("-", 6)]);
             }
         }
     }
@@ -253,8 +286,7 @@ fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
 fn find_tex_files(dir: &PathBuf) -> Result<Vec<PathBuf>, String> {
     let mut tex_files = Vec::new();
 
-    let entries = fs::read_dir(dir)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
+    let entries = fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     for entry in entries.flatten() {
         let path = entry.path();

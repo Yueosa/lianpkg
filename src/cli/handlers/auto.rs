@@ -595,8 +595,8 @@ fn estimate_disk_usage(config: &native::RuntimeConfig, quiet: bool) -> Result<Di
 }
 
 /// 查找存在的父目录
-fn find_existing_parent(path: &PathBuf) -> Option<PathBuf> {
-    let mut check_path = path.clone();
+fn find_existing_parent(path: &std::path::Path) -> Option<PathBuf> {
+    let mut check_path = path.to_path_buf();
     while !check_path.exists() {
         if let Some(parent) = check_path.parent() {
             check_path = parent.to_path_buf();
@@ -704,7 +704,7 @@ fn show_config(config: &native::RuntimeConfig) {
 fn run_dry_run(
     config: &native::RuntimeConfig,
     args: &AutoArgs,
-    state_path: &PathBuf,
+    state_path: &std::path::Path,
 ) -> Result<(), String> {
     out::title("Auto Mode (Dry Run)");
     out::warning("This is a dry run - no actual operations will be performed");
@@ -740,7 +740,7 @@ fn run_dry_run(
     // 增量处理统计
     if args.incremental {
         let state_result = native::load_state(native::LoadStateInput {
-            state_path: state_path.clone(),
+            state_path: (*state_path).to_path_buf(),
         });
 
         if let Some(state) = state_result.state {
@@ -837,7 +837,7 @@ fn run_dry_run(
 fn run_dry_run_preview(
     config: &native::RuntimeConfig,
     args: &AutoArgs,
-    state_path: &PathBuf,
+    state_path: &std::path::Path,
 ) -> Result<(), String> {
     out::title("Auto Mode Preview");
     out::warning("Please review the configuration before execution");
@@ -873,7 +873,7 @@ fn run_dry_run_preview(
     // 增量处理统计
     if args.incremental {
         let state_result = native::load_state(native::LoadStateInput {
-            state_path: state_path.clone(),
+            state_path: state_path.to_path_buf(),
         });
 
         if let Some(state) = state_result.state {

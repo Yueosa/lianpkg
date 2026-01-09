@@ -12,22 +12,12 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 // ============================================================================
 
 /// 当前进度条状态
+#[derive(Default)]
 struct ProgressState {
     active: bool,
     label: String,
     current: usize,
     total: usize,
-}
-
-impl Default for ProgressState {
-    fn default() -> Self {
-        Self {
-            active: false,
-            label: String::new(),
-            current: 0,
-            total: 0,
-        }
-    }
 }
 
 static PROGRESS_STATE: Mutex<ProgressState> = Mutex::new(ProgressState {

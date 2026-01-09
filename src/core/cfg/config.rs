@@ -4,166 +4,120 @@ use std::fs;
 use toml::Value;
 
 use crate::core::cfg::structs::{
-    CreateConfigInput, CreateConfigOutput,
-    ReadConfigInput, ReadConfigOutput,
-    UpdateConfigInput, UpdateConfigOutput,
-    DeleteConfigInput, DeleteConfigOutput,
+    CreateConfigInput, CreateConfigOutput, DeleteConfigInput, DeleteConfigOutput, ReadConfigInput,
+    ReadConfigOutput, UpdateConfigInput, UpdateConfigOutput,
 };
 use crate::core::cfg::utl::{default_config_template, ensure_dir};
+use crate::core::error::{CoreError, CoreResult};
 
 /// 创建配置文件
 /// 如果文件已存在则不创建，返回 created = false
 /// 如果不提供内容则使用默认模板
-pub fn create_config_toml(input: CreateConfigInput) -> CreateConfigOutput {
+pub fn create_config_toml(input: CreateConfigInput) -> CoreResult<CreateConfigOutput> {
     let path = input.path;
-    
+
     // 文件已存在，不触发创建
     if path.exists() {
-        return CreateConfigOutput {
+        return Ok(CreateConfigOutput {
             created: false,
             path,
-        };
+        });
     }
-    
+
     // 确保父目录存在
     if let Some(parent) = path.parent() {
-        if let Err(_) = ensure_dir(parent) {
-            return CreateConfigOutput {
-                created: false,
-                path,
-            };
-        }
+        ensure_dir(parent)?;
     }
-    
+
     // 获取内容：优先使用提供的内容，否则使用默认模板
-    let content = input.content.unwrap_or_else(|| default_config_template());
-    
+    let content = input.content.unwrap_or_else(default_config_template);
+
     // 写入文件
-    match fs::write(&path, content) {
-        Ok(_) => CreateConfigOutput {
-            created: true,
-            path,
-        },
-        Err(_) => CreateConfigOutput {
-            created: false,
-            path,
-        },
-    }
+    fs::write(&path, content)
+        .map_err(|e| CoreError::io_with_path(e.to_string(), path.display().to_string()))?;
+
+    Ok(CreateConfigOutput {
+        created: true,
+        path,
+    })
 }
 
 /// 读取配置文件
-/// 返回文件内容，文件不存在或读取失败时 success = false
-pub fn read_config_toml(input: ReadConfigInput) -> ReadConfigOutput {
+/// 返回文件内容
+pub fn read_config_toml(input: ReadConfigInput) -> CoreResult<ReadConfigOutput> {
     let path = input.path;
-    
+
     if !path.exists() {
-        return ReadConfigOutput {
-            success: false,
-            content: None,
-        };
+        return Err(CoreError::not_found_with_path(
+            "Config file not found",
+            path.display().to_string(),
+        ));
     }
-    
-    match fs::read_to_string(&path) {
-        Ok(content) => ReadConfigOutput {
-            success: true,
-            content: Some(content),
-        },
-        Err(_) => ReadConfigOutput {
-            success: false,
-            content: None,
-        },
-    }
+
+    let content = fs::read_to_string(&path)
+        .map_err(|e| CoreError::io_with_path(e.to_string(), path.display().to_string()))?;
+
+    Ok(ReadConfigOutput { content })
 }
 
 /// 更新配置文件
 /// 支持点号分隔的嵌套键，如 "wallpaper.workshop_path"
 /// 键存在则更新，不存在则新建
-pub fn update_config_toml(input: UpdateConfigInput) -> UpdateConfigOutput {
+pub fn update_config_toml(input: UpdateConfigInput) -> CoreResult<UpdateConfigOutput> {
     let path = input.path.clone();
-    
+
     // 读取现有内容
-    let read_result = read_config_toml(ReadConfigInput { path: path.clone() });
-    
-    let content = match read_result.content {
-        Some(c) => c,
-        None => {
-            return UpdateConfigOutput {
-                success: false,
-                content: None,
-            };
-        }
-    };
-    
+    let read_result = read_config_toml(ReadConfigInput { path: path.clone() })?;
+
     // 解析 TOML
-    let mut value: Value = match content.parse() {
-        Ok(v) => v,
-        Err(_) => {
-            return UpdateConfigOutput {
-                success: false,
-                content: None,
-            };
-        }
-    };
-    
+    let mut value: Value = read_result
+        .content
+        .parse()
+        .map_err(|e: toml::de::Error| CoreError::parse_with_source(e.to_string(), "TOML"))?;
+
     // 解析键路径并更新值
     let keys: Vec<&str> = input.key.split('.').collect();
     if !set_nested_value(&mut value, &keys, &input.value) {
-        return UpdateConfigOutput {
-            success: false,
-            content: None,
-        };
+        return Err(CoreError::validation(format!(
+            "Failed to set key '{}'",
+            input.key
+        )));
     }
-    
+
     // 序列化并写回
-    let new_content = match toml::to_string_pretty(&value) {
-        Ok(s) => s,
-        Err(_) => {
-            return UpdateConfigOutput {
-                success: false,
-                content: None,
-            };
-        }
-    };
-    
-    if fs::write(&path, &new_content).is_err() {
-        return UpdateConfigOutput {
-            success: false,
-            content: None,
-        };
-    }
-    
-    // 复用 read_config_toml 返回最新内容
-    let final_read = read_config_toml(ReadConfigInput { path });
-    UpdateConfigOutput {
-        success: true,
-        content: final_read.content,
-    }
+    let new_content = toml::to_string_pretty(&value)
+        .map_err(|e| CoreError::parse_with_source(e.to_string(), "TOML"))?;
+
+    fs::write(&path, &new_content)
+        .map_err(|e| CoreError::io_with_path(e.to_string(), path.display().to_string()))?;
+
+    // 返回更新后的内容
+    Ok(UpdateConfigOutput {
+        content: new_content,
+    })
 }
 
 /// 删除配置文件
 /// 文件不存在视为成功，但 deleted = false
-pub fn delete_config_toml(input: DeleteConfigInput) -> DeleteConfigOutput {
+pub fn delete_config_toml(input: DeleteConfigInput) -> CoreResult<DeleteConfigOutput> {
     let path = input.path;
-    
+
     // 文件不存在，不触发删除
     if !path.exists() {
-        return DeleteConfigOutput {
+        return Ok(DeleteConfigOutput {
             deleted: false,
             path,
-        };
+        });
     }
-    
+
     // 删除文件
-    match fs::remove_file(&path) {
-        Ok(_) => DeleteConfigOutput {
-            deleted: true,
-            path,
-        },
-        Err(_) => DeleteConfigOutput {
-            deleted: false,
-            path,
-        },
-    }
+    fs::remove_file(&path)
+        .map_err(|e| CoreError::io_with_path(e.to_string(), path.display().to_string()))?;
+
+    Ok(DeleteConfigOutput {
+        deleted: true,
+        path,
+    })
 }
 
 /// 设置嵌套键的值
@@ -172,10 +126,10 @@ fn set_nested_value(root: &mut Value, keys: &[&str], new_value: &str) -> bool {
     if keys.is_empty() {
         return false;
     }
-    
+
     // 尝试解析新值为合适的 TOML 类型
     let parsed_value = parse_value_string(new_value);
-    
+
     if keys.len() == 1 {
         // 最后一层，直接设置值
         if let Value::Table(table) = root {
@@ -184,15 +138,16 @@ fn set_nested_value(root: &mut Value, keys: &[&str], new_value: &str) -> bool {
         }
         return false;
     }
-    
+
     // 递归处理中间层
     if let Value::Table(table) = root {
         let key = keys[0];
-        let entry = table.entry(key.to_string())
+        let entry = table
+            .entry(key.to_string())
             .or_insert_with(|| Value::Table(toml::map::Map::new()));
         return set_nested_value(entry, &keys[1..], new_value);
     }
-    
+
     false
 }
 
@@ -205,17 +160,17 @@ fn parse_value_string(s: &str) -> Value {
     if s == "false" {
         return Value::Boolean(false);
     }
-    
+
     // 尝试解析为整数
     if let Ok(i) = s.parse::<i64>() {
         return Value::Integer(i);
     }
-    
+
     // 尝试解析为浮点数
     if let Ok(f) = s.parse::<f64>() {
         return Value::Float(f);
     }
-    
+
     // 默认作为字符串
     Value::String(s.to_string())
 }

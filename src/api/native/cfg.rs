@@ -161,10 +161,18 @@ pub fn init_config(input: InitConfigInput) -> InitConfigOutput {
         content: None,
     });
 
+    // 检查结果
+    let (config_created, state_created) = match (config_result, state_result) {
+        (Ok(c), Ok(s)) => (c.created, s.created),
+        (Ok(c), Err(_)) => (c.created, false),
+        (Err(_), Ok(s)) => (false, s.created),
+        (Err(_), Err(_)) => (false, false),
+    };
+
     InitConfigOutput {
         success: true,
-        config_created: config_result.created,
-        state_created: state_result.created,
+        config_created,
+        state_created,
         config_path,
         state_path,
         error: None,
@@ -180,21 +188,13 @@ pub fn load_config(input: LoadConfigInput) -> LoadConfigOutput {
         path: input.config_path,
     });
 
-    if !read_result.success {
-        return LoadConfigOutput {
-            success: false,
-            config: None,
-            error: Some("Failed to read config.toml".to_string()),
-        };
-    }
-
-    let content = match read_result.content {
-        Some(c) => c,
-        None => {
+    let content = match read_result {
+        Ok(r) => r.content,
+        Err(e) => {
             return LoadConfigOutput {
                 success: false,
                 config: None,
-                error: Some("Config content is empty".to_string()),
+                error: Some(format!("Failed to read config.toml: {}", e)),
             };
         }
     };
@@ -220,21 +220,13 @@ pub fn load_state(input: LoadStateInput) -> LoadStateOutput {
         path: input.state_path,
     });
 
-    if !read_result.success {
-        return LoadStateOutput {
-            success: false,
-            state: None,
-            error: Some("Failed to read state.json".to_string()),
-        };
-    }
-
-    let content = match read_result.content {
-        Some(c) => c,
-        None => {
+    let content = match read_result {
+        Ok(r) => r.content,
+        Err(e) => {
             return LoadStateOutput {
                 success: false,
                 state: None,
-                error: Some("State content is empty".to_string()),
+                error: Some(format!("Failed to read state.json: {}", e)),
             };
         }
     };
@@ -270,12 +262,14 @@ pub fn save_state(input: SaveStateInput) -> SaveStateOutput {
         content,
     });
 
-    SaveStateOutput {
-        success: write_result.success,
-        error: if write_result.success {
-            None
-        } else {
-            Some("Failed to write state.json".to_string())
+    match write_result {
+        Ok(_) => SaveStateOutput {
+            success: true,
+            error: None,
+        },
+        Err(e) => SaveStateOutput {
+            success: false,
+            error: Some(format!("Failed to write state.json: {}", e)),
         },
     }
 }
@@ -347,13 +341,13 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
     let workshop_path = wallpaper
         .get("workshop_path")
         .and_then(|v| v.as_str())
-        .map(|s| path::expand_path(s))
+        .map(path::expand_path_compat)
         .unwrap_or_else(|| PathBuf::from(path::default_workshop_path()));
 
     let raw_output_path = wallpaper
         .get("raw_output_path")
         .and_then(|v| v.as_str())
-        .map(|s| path::expand_path(s))
+        .map(path::expand_path_compat)
         .unwrap_or_else(|| PathBuf::from(path::default_raw_output_path()));
 
     let enable_raw_output = wallpaper
@@ -364,7 +358,7 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
     let pkg_temp_path = wallpaper
         .get("pkg_temp_path")
         .and_then(|v| v.as_str())
-        .map(|s| path::expand_path(s))
+        .map(path::expand_path_compat)
         .unwrap_or_else(|| PathBuf::from(path::default_pkg_temp_path()));
 
     // 解析 [unpack] 部分
@@ -373,7 +367,7 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
     let unpacked_output_path = unpack
         .and_then(|u| u.get("unpacked_output_path"))
         .and_then(|v| v.as_str())
-        .map(|s| path::expand_path(s))
+        .map(path::expand_path_compat)
         .unwrap_or_else(|| PathBuf::from(path::default_unpacked_output_path()));
 
     let clean_pkg_temp = unpack
@@ -393,7 +387,7 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
         .and_then(|t| t.get("converted_output_path"))
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .map(|s| path::expand_path(s));
+        .map(path::expand_path_compat);
 
     // 解析 [pipeline] 部分
     let pipeline_section = doc.get("pipeline").and_then(|v| v.as_table());

@@ -1,7 +1,7 @@
 //! 结构体定义 - Input/Output、运行时结构体
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
 
 // ============================================================================
 // Input 结构体
@@ -30,25 +30,17 @@ pub struct ConvertTexInput {
 /// parse_tex 接口返回值
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParseTexOutput {
-    /// 是否成功
-    pub success: bool,
-    /// TEX 文件信息，失败时为 None
-    pub tex_info: Option<TexInfo>,
-    /// 错误信息
-    pub error: Option<String>,
+    /// TEX 文件信息
+    pub tex_info: TexInfo,
 }
 
 /// convert_tex 接口返回值
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConvertTexOutput {
-    /// 是否成功
-    pub success: bool,
     /// 转换后的文件信息
-    pub converted_file: Option<ConvertedFile>,
+    pub converted_file: ConvertedFile,
     /// TEX 文件信息
-    pub tex_info: Option<TexInfo>,
-    /// 错误信息
-    pub error: Option<String>,
+    pub tex_info: TexInfo,
 }
 
 // ============================================================================
@@ -145,7 +137,7 @@ pub enum MipmapFormat {
     CompressedDXT3 = 5,
     CompressedDXT1 = 6,
     VideoMp4 = 7,
-    
+
     // 图片格式
     ImageBMP = 1000,
     ImageICO,
@@ -194,7 +186,12 @@ impl MipmapFormat {
     /// 是否为压缩格式
     #[allow(dead_code)]
     pub fn is_compressed(&self) -> bool {
-        matches!(self, MipmapFormat::CompressedDXT1 | MipmapFormat::CompressedDXT3 | MipmapFormat::CompressedDXT5)
+        matches!(
+            self,
+            MipmapFormat::CompressedDXT1
+                | MipmapFormat::CompressedDXT3
+                | MipmapFormat::CompressedDXT5
+        )
     }
 
     /// 获取格式名称

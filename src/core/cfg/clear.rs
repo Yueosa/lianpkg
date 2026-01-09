@@ -2,34 +2,28 @@
 
 use std::fs;
 
-use crate::core::cfg::structs::{
-    ClearInput, ClearOutput, DeletedItem, ItemType,
-};
+use crate::core::cfg::structs::{ClearInput, ClearOutput, DeletedItem, ItemType};
+use crate::core::error::{CoreError, CoreResult};
 
 /// 递归删除目录下所有文件和子目录
 /// 目录不存在视为成功，但 cleared = false
-pub fn clear_lianpkg(input: ClearInput) -> ClearOutput {
+pub fn clear_lianpkg(input: ClearInput) -> CoreResult<ClearOutput> {
     let dir_path = input.dir_path;
-    
+
     // 目录不存在，不触发删除
     if !dir_path.exists() {
-        return ClearOutput {
+        return Ok(ClearOutput {
             cleared: false,
             deleted_items: Vec::new(),
-        };
+        });
     }
-    
+
     // 收集所有要删除的项
     let mut deleted_items = Vec::new();
-    
+
     // 递归收集并删除
-    if let Err(_) = collect_and_delete(&dir_path, &mut deleted_items) {
-        return ClearOutput {
-            cleared: false,
-            deleted_items,
-        };
-    }
-    
+    collect_and_delete(&dir_path, &mut deleted_items)?;
+
     // 删除根目录本身
     if fs::remove_dir(&dir_path).is_ok() {
         deleted_items.push(DeletedItem {
@@ -37,11 +31,11 @@ pub fn clear_lianpkg(input: ClearInput) -> ClearOutput {
             item_type: ItemType::Directory,
         });
     }
-    
-    ClearOutput {
+
+    Ok(ClearOutput {
         cleared: true,
         deleted_items,
-    }
+    })
 }
 
 /// 递归收集并删除目录内容
@@ -49,18 +43,19 @@ pub fn clear_lianpkg(input: ClearInput) -> ClearOutput {
 fn collect_and_delete(
     dir: &std::path::Path,
     deleted_items: &mut Vec<DeletedItem>,
-) -> Result<(), String> {
+) -> CoreResult<()> {
     let entries = fs::read_dir(dir)
-        .map_err(|e| format!("Failed to read dir {}: {}", dir.display(), e))?;
-    
+        .map_err(|e| CoreError::io_with_path(e.to_string(), dir.display().to_string()))?;
+
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let entry =
+            entry.map_err(|e| CoreError::io_with_path(e.to_string(), dir.display().to_string()))?;
         let path = entry.path();
-        
+
         if path.is_dir() {
             // 递归处理子目录
             collect_and_delete(&path, deleted_items)?;
-            
+
             // 删除空目录
             if fs::remove_dir(&path).is_ok() {
                 deleted_items.push(DeletedItem {
@@ -78,6 +73,6 @@ fn collect_and_delete(
             }
         }
     }
-    
+
     Ok(())
 }

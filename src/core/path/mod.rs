@@ -1,64 +1,172 @@
 //! path 模块 - 路径处理与解析
 //!
-//! 本模块提供各类路径解析功能：
-//! - 配置文件路径: default_config_dir, default_config_toml_path, default_state_json_path
-//! - Steam/Workshop 路径: default_workshop_path
-//! - 输出路径: default_raw_output_path, default_pkg_temp_path, default_unpacked_output_path
-//! - Pkg 路径: pkg_temp_dest, scene_name_from_pkg_stem
-//! - Tex 路径: resolve_tex_output_dir
-//! - 文件扫描: get_target_files, find_project_root
-//! - 通用工具: ensure_dir, expand_path, get_unique_output_path
+//! ## 核心接口 (4个)
+//!
+//! | 接口 | 功能 |
+//! |------|------|
+//! | `ensure_dir` | 确保目录存在，不存在则递归创建 |
+//! | `expand_path` | 展开路径中的 `~` 为用户主目录 |
+//! | `resolve_path` | 统一路径解析（配置、输出、Workshop 等） |
+//! | `scan_files` | 扫描目标文件（递归，支持扩展名过滤） |
+//!
+//! ## 路径类型 (PathType)
+//!
+//! `resolve_path` 通过 `PathType` 枚举支持多种路径解析：
+//! - `ConfigDir` - 配置目录
+//! - `ConfigToml` - config.toml 路径
+//! - `StateJson` - state.json 路径
+//! - `Workshop` - Steam Workshop 路径
+//! - `RawOutput` - 原始壁纸输出路径
+//! - `PkgTemp` - PKG 临时路径
+//! - `UnpackedOutput` - 解包输出路径
+//! - `PkgTempDest { dir_name, file_name }` - PKG 临时目标名
+//! - `SceneName { stem }` - 从 PKG stem 提取场景名
+//! - `TexOutput { tex_path, output_base }` - TEX 输出目录
 
-mod utl;    // 通用工具函数
-mod cfg;    // Config 路径解析
-mod steam;  // Steam/Wallpaper 路径定位
-mod output; // 输出路径解析
-mod pkg;    // Pkg 路径解析
-mod tex;    // Tex 路径解析
-mod scan;   // 文件扫描相关
+mod resolve;
+mod scan;
+mod types;
+mod utl;
 
 // ============================================================================
-// 导出通用工具函数
+// 导出 Input/Output 结构体
 // ============================================================================
+pub use types::EnsureDirInput;
+pub use types::EnsureDirOutput;
+pub use types::ExpandPathInput;
+pub use types::ExpandPathOutput;
+pub use types::ScanFilesInput;
+pub use types::ScanFilesOutput;
+
+// ============================================================================
+// 导出 resolve_path 相关
+// ============================================================================
+pub use resolve::resolve_path;
+pub use resolve::PathType;
+pub use resolve::ResolvePathInput;
+pub use resolve::ResolvePathOutput;
+
+// ============================================================================
+// 导出核心接口
+// ============================================================================
+pub use scan::scan_files;
 pub use utl::ensure_dir;
 pub use utl::expand_path;
-pub use utl::get_unique_output_path;
 
 // ============================================================================
-// 导出 Config 路径接口
+// 兼容层（供 api/native 和 cli 过渡使用）
+// 这些函数将在 api/cli 迁移到新接口后移除
 // ============================================================================
-pub use cfg::default_config_dir;
-pub use cfg::default_config_toml_path;
-pub use cfg::default_state_json_path;
-pub use cfg::exe_dir;
-pub use cfg::exe_config_dir;
 
-// ============================================================================
-// 导出 Steam/Workshop 路径接口
-// ============================================================================
-pub use steam::default_workshop_path;
+use std::path::{Path, PathBuf};
 
-// ============================================================================
-// 导出输出路径接口
-// ============================================================================
-pub use output::default_raw_output_path;
-pub use output::default_pkg_temp_path;
-pub use output::default_unpacked_output_path;
+/// 兼容层：展开路径中的 ~
+pub fn expand_path_compat(path_str: &str) -> PathBuf {
+    expand_path(ExpandPathInput {
+        path: path_str.to_string(),
+    })
+    .map(|o| o.path)
+    .unwrap_or_else(|_| PathBuf::from(path_str))
+}
 
-// ============================================================================
-// 导出 Pkg 路径接口
-// ============================================================================
-pub use pkg::pkg_temp_dest;
-pub use pkg::scene_name_from_pkg_stem;
+/// 兼容层：确保目录存在
+pub fn ensure_dir_compat(path: &Path) -> Result<(), String> {
+    ensure_dir(EnsureDirInput {
+        path: path.to_path_buf(),
+    })
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
 
-// ============================================================================
-// 导出 Tex 路径接口
-// ============================================================================
-pub use tex::resolve_tex_output_dir;
+/// 兼容层：获取默认配置目录
+pub fn default_config_dir() -> PathBuf {
+    resolve_path(ResolvePathInput {
+        path_type: PathType::ConfigDir,
+    })
+    .map(|o| o.path)
+    .unwrap_or_else(|_| PathBuf::from("."))
+}
 
-// ============================================================================
-// 导出文件扫描接口
-// ============================================================================
-pub use scan::get_target_files;
-pub use scan::find_project_root;
+/// 兼容层：获取默认 workshop 路径
+pub fn default_workshop_path() -> String {
+    resolve_path(ResolvePathInput {
+        path_type: PathType::Workshop,
+    })
+    .map(|o| o.path_str)
+    .unwrap_or_else(|_| "~/.local/share/Steam/steamapps/workshop/content/431960".to_string())
+}
 
+/// 兼容层：获取默认原始壁纸输出路径
+pub fn default_raw_output_path() -> String {
+    resolve_path(ResolvePathInput {
+        path_type: PathType::RawOutput,
+    })
+    .map(|o| o.path_str)
+    .unwrap_or_else(|_| "~/.local/share/lianpkg/Wallpapers_Raw".to_string())
+}
+
+/// 兼容层：获取默认 pkg 临时路径
+pub fn default_pkg_temp_path() -> String {
+    resolve_path(ResolvePathInput {
+        path_type: PathType::PkgTemp,
+    })
+    .map(|o| o.path_str)
+    .unwrap_or_else(|_| "~/.local/share/lianpkg/Pkg_Temp".to_string())
+}
+
+/// 兼容层：获取默认解包输出路径
+pub fn default_unpacked_output_path() -> String {
+    resolve_path(ResolvePathInput {
+        path_type: PathType::UnpackedOutput,
+    })
+    .map(|o| o.path_str)
+    .unwrap_or_else(|_| "~/.local/share/lianpkg/Pkg_Unpacked".to_string())
+}
+
+/// 兼容层：生成 pkg 临时目标名
+pub fn pkg_temp_dest(dir_name: &str, file_name: &str) -> String {
+    resolve_path(ResolvePathInput {
+        path_type: PathType::PkgTempDest {
+            dir_name: dir_name.to_string(),
+            file_name: file_name.to_string(),
+        },
+    })
+    .map(|o| o.path_str)
+    .unwrap_or_else(|_| format!("{}_{}", dir_name, file_name))
+}
+
+/// 兼容层：从 pkg 文件名提取场景名
+pub fn scene_name_from_pkg_stem(stem: &str) -> String {
+    resolve_path(ResolvePathInput {
+        path_type: PathType::SceneName {
+            stem: stem.to_string(),
+        },
+    })
+    .map(|o| o.path_str)
+    .unwrap_or_else(|_| stem.to_string())
+}
+
+/// 兼容层：解析 tex 输出目录
+pub fn resolve_tex_output_dir_compat(
+    converted_output_path: Option<&str>,
+    scene_root: &Path,
+    input_file: Option<&Path>,
+    _relative_base: Option<&Path>,
+) -> PathBuf {
+    let output_base = if let Some(custom) = converted_output_path {
+        expand_path_compat(custom)
+    } else {
+        scene_root.to_path_buf()
+    };
+
+    let tex_path = input_file.unwrap_or(scene_root);
+
+    resolve_path(ResolvePathInput {
+        path_type: PathType::TexOutput {
+            tex_path: tex_path.to_path_buf(),
+            output_base,
+        },
+    })
+    .map(|o| o.path)
+    .unwrap_or_else(|_| scene_root.join("tex_converted"))
+}

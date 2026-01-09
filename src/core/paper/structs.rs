@@ -1,7 +1,9 @@
 //! 结构体定义 - 配置、Input/Output、运行时结构体
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
+
+// CoreResult 在函数签名中使用，结构体本身不需要引用
 
 // ============================================================================
 // 配置结构体
@@ -82,8 +84,6 @@ pub struct ExtractInput {
 /// list_dirs 接口返回值
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListDirsOutput {
-    /// 是否成功
-    pub success: bool,
     /// 目录列表
     pub dirs: Vec<String>,
 }
@@ -91,10 +91,8 @@ pub struct ListDirsOutput {
 /// read_meta 接口返回值
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadMetaOutput {
-    /// 是否成功
-    pub success: bool,
-    /// 元数据，失败时为 None
-    pub meta: Option<ProjectMeta>,
+    /// 元数据
+    pub meta: ProjectMeta,
 }
 
 /// check_pkg 接口返回值
@@ -199,4 +197,3 @@ pub enum ProcessResultType {
     /// 跳过（已存在等）
     Skipped,
 }
-

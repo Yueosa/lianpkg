@@ -2,28 +2,21 @@
 
 use std::fs;
 
+use crate::core::error::{CoreError, CoreResult};
 use crate::core::paper::structs::{
-    ListDirsInput, ListDirsOutput,
-    ReadMetaInput, ReadMetaOutput,
-    CheckPkgInput, CheckPkgOutput,
-    EstimateInput, EstimateOutput,
-    ProjectMeta,
+    CheckPkgInput, CheckPkgOutput, EstimateInput, EstimateOutput, ListDirsInput, ListDirsOutput,
+    ProjectMeta, ReadMetaInput, ReadMetaOutput,
 };
 use crate::core::paper::utl::get_dir_size;
 
 /// 列出指定目录下的所有子目录
-pub fn list_dirs(input: ListDirsInput) -> ListDirsOutput {
+pub fn list_dirs(input: ListDirsInput) -> CoreResult<ListDirsOutput> {
     let path = input.path;
-    
-    let entries = match fs::read_dir(&path) {
-        Ok(e) => e,
-        Err(_) => {
-            return ListDirsOutput {
-                success: false,
-                dirs: Vec::new(),
-            };
-        }
-    };
+
+    let entries = fs::read_dir(&path).map_err(|e| CoreError::Io {
+        message: e.to_string(),
+        path: Some(path.display().to_string()),
+    })?;
 
     let mut dirs = Vec::new();
     for entry in entries.flatten() {
@@ -35,43 +28,31 @@ pub fn list_dirs(input: ListDirsInput) -> ListDirsOutput {
         }
     }
 
-    ListDirsOutput {
-        success: true,
-        dirs,
-    }
+    Ok(ListDirsOutput { dirs })
 }
 
 /// 读取壁纸文件夹的 project.json 元数据
-pub fn read_meta(input: ReadMetaInput) -> ReadMetaOutput {
+pub fn read_meta(input: ReadMetaInput) -> CoreResult<ReadMetaOutput> {
     let meta_path = input.folder.join("project.json");
-    
+
     if !meta_path.exists() {
-        return ReadMetaOutput {
-            success: false,
-            meta: None,
-        };
+        return Err(CoreError::NotFound {
+            message: "project.json not found".to_string(),
+            path: Some(meta_path.display().to_string()),
+        });
     }
 
-    let content = match fs::read_to_string(&meta_path) {
-        Ok(c) => c,
-        Err(_) => {
-            return ReadMetaOutput {
-                success: false,
-                meta: None,
-            };
-        }
-    };
+    let content = fs::read_to_string(&meta_path).map_err(|e| CoreError::Io {
+        message: e.to_string(),
+        path: Some(meta_path.display().to_string()),
+    })?;
 
-    match serde_json::from_str::<ProjectMeta>(&content) {
-        Ok(meta) => ReadMetaOutput {
-            success: true,
-            meta: Some(meta),
-        },
-        Err(_) => ReadMetaOutput {
-            success: false,
-            meta: None,
-        },
-    }
+    let meta: ProjectMeta = serde_json::from_str(&content).map_err(|e| CoreError::Parse {
+        message: e.to_string(),
+        source: Some(meta_path.display().to_string()),
+    })?;
+
+    Ok(ReadMetaOutput { meta })
 }
 
 /// 检查文件夹是否包含 .pkg 文件
@@ -116,7 +97,9 @@ pub fn estimate(input: EstimateInput) -> EstimateOutput {
             }
 
             // 检查是否有 pkg 文件
-            let check_result = check_pkg(CheckPkgInput { folder: path.clone() });
+            let check_result = check_pkg(CheckPkgInput {
+                folder: path.clone(),
+            });
 
             if check_result.has_pkg {
                 pkg_count += 1;

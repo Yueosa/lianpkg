@@ -1,7 +1,7 @@
 //! 结构体定义 - 所有接口的入参与返回值结构体
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 // ============================================================================
 // Config.toml 相关结构体
@@ -17,7 +17,7 @@ pub struct CreateConfigInput {
 }
 
 /// create_config_toml 接口返回值
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CreateConfigOutput {
     /// 是否触发了创建操作（文件已存在时为 false）
     pub created: bool,
@@ -32,13 +32,11 @@ pub struct ReadConfigInput {
     pub path: PathBuf,
 }
 
-/// read_config_toml 接口返回值
-#[derive(Debug, Clone)]
+/// read_config_toml 接口返回值（成功时返回内容，失败通过 CoreError 返回）
+#[derive(Debug, Clone, Serialize)]
 pub struct ReadConfigOutput {
-    /// 是否读取成功
-    pub success: bool,
-    /// 读取到的内容，失败时为 None
-    pub content: Option<String>,
+    /// 读取到的内容
+    pub content: String,
 }
 
 /// update_config_toml 接口入参
@@ -52,13 +50,11 @@ pub struct UpdateConfigInput {
     pub value: String,
 }
 
-/// update_config_toml 接口返回值
-#[derive(Debug, Clone)]
+/// update_config_toml 接口返回值（成功时返回内容，失败通过 CoreError 返回）
+#[derive(Debug, Clone, Serialize)]
 pub struct UpdateConfigOutput {
-    /// 更新是否成功
-    pub success: bool,
-    /// 更新后的完整内容，失败时为 None
-    pub content: Option<String>,
+    /// 更新后的完整内容
+    pub content: String,
 }
 
 /// delete_config_toml 接口入参
@@ -69,7 +65,7 @@ pub struct DeleteConfigInput {
 }
 
 /// delete_config_toml 接口返回值
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DeleteConfigOutput {
     /// 是否触发了删除操作（文件不存在时为 false）
     pub deleted: bool,
@@ -150,7 +146,7 @@ pub struct CreateStateInput {
 }
 
 /// create_state_json 接口返回值
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CreateStateOutput {
     /// 是否触发了创建操作（文件已存在时为 false）
     pub created: bool,
@@ -165,13 +161,11 @@ pub struct ReadStateInput {
     pub path: PathBuf,
 }
 
-/// read_state_json 接口返回值
-#[derive(Debug, Clone)]
+/// read_state_json 接口返回值（成功时返回内容，失败通过 CoreError 返回）
+#[derive(Debug, Clone, Serialize)]
 pub struct ReadStateOutput {
-    /// 是否读取成功
-    pub success: bool,
-    /// 读取到的内容，失败时为 None
-    pub content: Option<String>,
+    /// 读取到的内容
+    pub content: String,
 }
 
 /// write_state_json 接口入参
@@ -183,13 +177,11 @@ pub struct WriteStateInput {
     pub content: String,
 }
 
-/// write_state_json 接口返回值
-#[derive(Debug, Clone)]
+/// write_state_json 接口返回值（成功时返回内容，失败通过 CoreError 返回）
+#[derive(Debug, Clone, Serialize)]
 pub struct WriteStateOutput {
-    /// 覆写是否成功
-    pub success: bool,
-    /// 覆写后的内容，失败时为 None
-    pub content: Option<String>,
+    /// 覆写后的内容
+    pub content: String,
 }
 
 /// delete_state_json 接口入参
@@ -200,7 +192,7 @@ pub struct DeleteStateInput {
 }
 
 /// delete_state_json 接口返回值
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DeleteStateOutput {
     /// 是否触发了删除操作（文件不存在时为 false）
     pub deleted: bool,

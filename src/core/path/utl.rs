@@ -1,44 +1,42 @@
 //! 通用路径工具函数
 
+use super::types::*;
+use crate::core::error::{CoreError, CoreResult};
 use std::fs;
-use std::path::{Path, PathBuf};
 
 /// 确保目录存在，不存在则递归创建
-pub fn ensure_dir(path: &Path) -> Result<(), String> {
-    fs::create_dir_all(path)
-        .map_err(|e| format!("Failed to create dir {}: {}", path.display(), e))
+pub fn ensure_dir(input: EnsureDirInput) -> CoreResult<EnsureDirOutput> {
+    let created = if input.path.exists() {
+        false
+    } else {
+        fs::create_dir_all(&input.path).map_err(|e| {
+            CoreError::io_with_path(e.to_string(), input.path.display().to_string())
+        })?;
+        true
+    };
+
+    Ok(EnsureDirOutput {
+        path: input.path,
+        created,
+    })
 }
 
 /// 展开路径中的 `~` 为用户主目录
-pub fn expand_path(path_str: &str) -> PathBuf {
-    if path_str.starts_with("~") {
-        if let Some(home) = dirs::home_dir() {
-            if path_str == "~" {
-                return home;
-            }
-            if path_str.starts_with("~/") {
-                return home.join(&path_str[2..]);
-            }
-        }
-    }
-    PathBuf::from(path_str)
-}
+pub fn expand_path(input: ExpandPathInput) -> CoreResult<ExpandPathOutput> {
+    let path = if input.path.starts_with("~") {
+        let home =
+            dirs::home_dir().ok_or_else(|| CoreError::not_found("Home directory not found"))?;
 
-/// 获取唯一的输出路径
-/// 如果目标路径已存在，会在文件名后添加 `-1`, `-2` 等后缀
-pub fn get_unique_output_path(base: &Path, name: &str) -> PathBuf {
-    let mut target = base.join(name);
-    if !target.exists() {
-        return target;
-    }
-
-    let mut i = 1;
-    loop {
-        let new_name = format!("{}-{}", name, i);
-        target = base.join(&new_name);
-        if !target.exists() {
-            return target;
+        if input.path == "~" {
+            home
+        } else if input.path.starts_with("~/") {
+            home.join(&input.path[2..])
+        } else {
+            std::path::PathBuf::from(&input.path)
         }
-        i += 1;
-    }
+    } else {
+        std::path::PathBuf::from(&input.path)
+    };
+
+    Ok(ExpandPathOutput { path })
 }

@@ -1,11 +1,11 @@
 //! Config 模式处理器
 
-use std::path::PathBuf;
-use std::process::Command;
 use super::super::args::{ConfigArgs, ConfigCommand};
 use super::super::output as out;
 use lianpkg::api::native;
 use lianpkg::core::{cfg, path};
+use std::path::PathBuf;
+use std::process::Command;
 
 /// 执行 config 命令
 pub fn run(args: &ConfigArgs, config_path: Option<PathBuf>) -> Result<(), String> {
@@ -32,25 +32,22 @@ pub fn run(args: &ConfigArgs, config_path: Option<PathBuf>) -> Result<(), String
 }
 
 /// 显示完整配置
-fn show_config(config_path: &PathBuf) -> Result<(), String> {
+fn show_config(config_path: &std::path::Path) -> Result<(), String> {
     out::title("Configuration");
     out::path_info("Config File", config_path);
     println!();
 
     // 读取并显示配置
-    let read_result = cfg::read_config_toml(cfg::ReadConfigInput {
-        path: config_path.clone(),
-    });
+    let content = match cfg::read_config_toml(cfg::ReadConfigInput {
+        path: config_path.to_path_buf(),
+    }) {
+        Ok(r) => r.content,
+        Err(e) => return Err(format!("Failed to read config: {}", e)),
+    };
 
-    if !read_result.success {
-        return Err("Failed to read config".to_string());
-    }
-
-    let content = read_result.content.unwrap_or_default();
-    
     // 解析并格式化显示
     let load_result = native::load_config(native::LoadConfigInput {
-        config_path: config_path.clone(),
+        config_path: config_path.to_path_buf(),
     });
 
     if let Some(config) = load_result.config {
@@ -61,15 +58,20 @@ fn show_config(config_path: &PathBuf) -> Result<(), String> {
         out::stat("pkg_temp_path", config.pkg_temp_path.display());
 
         out::subtitle("[unpack]");
-        out::stat("unpacked_output_path", config.unpacked_output_path.display());
+        out::stat(
+            "unpacked_output_path",
+            config.unpacked_output_path.display(),
+        );
         out::stat("clean_pkg_temp", config.clean_pkg_temp);
         out::stat("clean_unpacked", config.clean_unpacked);
 
         out::subtitle("[tex]");
-        out::stat("converted_output_path", 
-            config.converted_output_path
+        out::stat(
+            "converted_output_path",
+            config
+                .converted_output_path
                 .map(|p| p.display().to_string())
-                .unwrap_or_else(|| "(auto)".to_string())
+                .unwrap_or_else(|| "(auto)".to_string()),
         );
 
         out::subtitle("[pipeline]");
@@ -85,12 +87,15 @@ fn show_config(config_path: &PathBuf) -> Result<(), String> {
 }
 
 /// 显示配置文件路径
-fn show_path(config_path: &PathBuf, state_path: &PathBuf) -> Result<(), String> {
+fn show_path(config_path: &std::path::Path, state_path: &std::path::Path) -> Result<(), String> {
     out::title("Configuration Paths");
     out::path_info("Config File", config_path);
     out::path_info("State File", state_path);
-    out::path_info("Config Directory", config_path.parent().unwrap_or(config_path));
-    
+    out::path_info(
+        "Config Directory",
+        config_path.parent().unwrap_or(config_path),
+    );
+
     // 默认路径
     out::subtitle("Default Paths");
     out::stat("Default Config Dir", path::default_config_dir().display());
@@ -103,20 +108,17 @@ fn show_path(config_path: &PathBuf, state_path: &PathBuf) -> Result<(), String> 
 }
 
 /// 获取指定配置项
-fn get_config(config_path: &PathBuf, key: &str) -> Result<(), String> {
-    let read_result = cfg::read_config_toml(cfg::ReadConfigInput {
-        path: config_path.clone(),
-    });
+fn get_config(config_path: &std::path::Path, key: &str) -> Result<(), String> {
+    let content = match cfg::read_config_toml(cfg::ReadConfigInput {
+        path: config_path.to_path_buf(),
+    }) {
+        Ok(r) => r.content,
+        Err(e) => return Err(format!("Failed to read config: {}", e)),
+    };
 
-    if !read_result.success {
-        return Err("Failed to read config".to_string());
-    }
-
-    let content = read_result.content.unwrap_or_default();
-    
     // 解析 TOML
-    let doc: toml::Table = toml::from_str(&content)
-        .map_err(|e| format!("Failed to parse config: {}", e))?;
+    let doc: toml::Table =
+        toml::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
 
     // 按点分隔的键查找
     let parts: Vec<&str> = key.split('.').collect();
@@ -124,7 +126,7 @@ fn get_config(config_path: &PathBuf, key: &str) -> Result<(), String> {
 
     match value {
         Some(v) => {
-            println!("{}", format_toml_value(&v));
+            println!("{}", format_toml_value(v));
             Ok(())
         }
         None => Err(format!("Key '{}' not found", key)),
@@ -132,23 +134,22 @@ fn get_config(config_path: &PathBuf, key: &str) -> Result<(), String> {
 }
 
 /// 设置配置项
-fn set_config(config_path: &PathBuf, key: &str, value: &str) -> Result<(), String> {
-    let result = cfg::update_config_toml(cfg::UpdateConfigInput {
-        path: config_path.clone(),
+fn set_config(config_path: &std::path::Path, key: &str, value: &str) -> Result<(), String> {
+    match cfg::update_config_toml(cfg::UpdateConfigInput {
+        path: config_path.to_path_buf(),
         key: key.to_string(),
         value: value.to_string(),
-    });
-
-    if result.success {
-        out::success(&format!("Set {} = {}", key, value));
-        Ok(())
-    } else {
-        Err("Failed to update config".to_string())
+    }) {
+        Ok(_) => {
+            out::success(&format!("Set {} = {}", key, value));
+            Ok(())
+        }
+        Err(e) => Err(format!("Failed to update config: {}", e)),
     }
 }
 
 /// 重置配置
-fn reset_config(config_path: &PathBuf, yes: bool) -> Result<(), String> {
+fn reset_config(config_path: &std::path::Path, yes: bool) -> Result<(), String> {
     if !yes {
         out::warning("This will reset config.toml to default values");
         if !out::confirm("Are you sure?") {
@@ -158,20 +159,20 @@ fn reset_config(config_path: &PathBuf, yes: bool) -> Result<(), String> {
 
     // 删除现有配置
     let _ = cfg::delete_config_toml(cfg::DeleteConfigInput {
-        path: config_path.clone(),
+        path: config_path.to_path_buf(),
     });
 
     // 重新创建
-    let result = cfg::create_config_toml(cfg::CreateConfigInput {
-        path: config_path.clone(),
+    match cfg::create_config_toml(cfg::CreateConfigInput {
+        path: config_path.to_path_buf(),
         content: None,
-    });
-
-    if result.created {
-        out::success("Config reset to defaults");
-        Ok(())
-    } else {
-        Err("Failed to reset config".to_string())
+    }) {
+        Ok(r) if r.created => {
+            out::success("Config reset to defaults");
+            Ok(())
+        }
+        Ok(_) => Err("Config file already exists".to_string()),
+        Err(e) => Err(format!("Failed to reset config: {}", e)),
     }
 }
 
@@ -182,9 +183,13 @@ fn edit_config(config_path: &PathBuf) -> Result<(), String> {
         .or_else(|_| std::env::var("VISUAL"))
         .unwrap_or_else(|_| {
             #[cfg(windows)]
-            { "notepad".to_string() }
+            {
+                "notepad".to_string()
+            }
             #[cfg(not(windows))]
-            { "vi".to_string() }
+            {
+                "vi".to_string()
+            }
         });
 
     out::info(&format!("Opening config with {}", editor));
@@ -209,7 +214,7 @@ fn find_value<'a>(table: &'a toml::Table, parts: &[&str]) -> Option<&'a toml::Va
     }
 
     let mut current: &toml::Value = table.get(parts[0])?;
-    
+
     for part in &parts[1..] {
         match current {
             toml::Value::Table(t) => {
@@ -234,7 +239,8 @@ fn format_toml_value(value: &toml::Value) -> String {
             format!("[{}]", items.join(", "))
         }
         toml::Value::Table(t) => {
-            let items: Vec<String> = t.iter()
+            let items: Vec<String> = t
+                .iter()
                 .map(|(k, v)| format!("{} = {}", k, format_toml_value(v)))
                 .collect();
             format!("{{ {} }}", items.join(", "))
