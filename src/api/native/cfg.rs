@@ -3,9 +3,9 @@
 //! 提供初始化、解析、保存等配置相关的便捷方法。
 //! 封装 core::cfg 的底层操作，提供更友好的 API。
 
-use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
 use crate::core::{cfg, path};
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 // ============================================================================
 // 结构体定义
@@ -130,7 +130,7 @@ pub struct SaveStateOutput {
 // ============================================================================
 
 /// 初始化配置文件
-/// 
+///
 /// 确保 config.toml 和 state.json 都存在，不存在则创建默认内容
 pub fn init_config(input: InitConfigInput) -> InitConfigOutput {
     // 确定配置目录
@@ -172,7 +172,7 @@ pub fn init_config(input: InitConfigInput) -> InitConfigOutput {
 }
 
 /// 加载并解析 config.toml
-/// 
+///
 /// 将 TOML 配置文件解析为 RuntimeConfig 结构
 pub fn load_config(input: LoadConfigInput) -> LoadConfigOutput {
     // 读取文件
@@ -239,7 +239,6 @@ pub fn load_state(input: LoadStateInput) -> LoadStateOutput {
         }
     };
 
-    // 解析 JSON
     match serde_json::from_str::<cfg::StateData>(&content) {
         Ok(state) => LoadStateOutput {
             success: true,
@@ -256,7 +255,6 @@ pub fn load_state(input: LoadStateInput) -> LoadStateOutput {
 
 /// 保存 state.json
 pub fn save_state(input: SaveStateInput) -> SaveStateOutput {
-    // 序列化为 JSON
     let content = match serde_json::to_string_pretty(&input.state) {
         Ok(c) => c,
         Err(e) => {
@@ -267,7 +265,6 @@ pub fn save_state(input: SaveStateInput) -> SaveStateOutput {
         }
     };
 
-    // 写入文件
     let write_result = cfg::write_state_json(cfg::WriteStateInput {
         path: input.state_path,
         content,
@@ -285,7 +282,9 @@ pub fn save_state(input: SaveStateInput) -> SaveStateOutput {
 
 /// 检查壁纸是否已处理
 pub fn is_wallpaper_processed(state: &cfg::StateData, wallpaper_id: &str) -> bool {
-    state.processed_wallpapers.iter()
+    state
+        .processed_wallpapers
+        .iter()
         .any(|w| w.wallpaper_id == wallpaper_id)
 }
 
@@ -298,7 +297,7 @@ pub fn add_processed_wallpaper(
     output_path: Option<String>,
 ) {
     use std::time::{SystemTime, UNIX_EPOCH};
-    
+
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -314,24 +313,19 @@ pub fn add_processed_wallpaper(
 }
 
 /// 更新统计信息
-pub fn update_statistics(
-    state: &mut cfg::StateData,
-    wallpapers: u64,
-    pkgs: u64,
-    texs: u64,
-) {
+pub fn update_statistics(state: &mut cfg::StateData, wallpapers: u64, pkgs: u64, texs: u64) {
     use std::time::{SystemTime, UNIX_EPOCH};
-    
+
     state.statistics.total_runs += 1;
     state.statistics.total_wallpapers += wallpapers;
     state.statistics.total_pkgs += pkgs;
     state.statistics.total_texs += texs;
-    
+
     state.last_run = Some(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
-            .unwrap_or(0)
+            .unwrap_or(0),
     );
 }
 
@@ -341,36 +335,40 @@ pub fn update_statistics(
 
 /// 解析 config.toml 内容为 RuntimeConfig
 fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
-    let doc: toml::Table = toml::from_str(content)
-        .map_err(|e| format!("TOML parse error: {}", e))?;
+    let doc: toml::Table =
+        toml::from_str(content).map_err(|e| format!("TOML parse error: {}", e))?;
 
     // 解析 [wallpaper] 部分
-    let wallpaper = doc.get("wallpaper")
+    let wallpaper = doc
+        .get("wallpaper")
         .and_then(|v| v.as_table())
         .ok_or("Missing [wallpaper] section")?;
 
-    let workshop_path = wallpaper.get("workshop_path")
+    let workshop_path = wallpaper
+        .get("workshop_path")
         .and_then(|v| v.as_str())
         .map(|s| path::expand_path(s))
         .unwrap_or_else(|| PathBuf::from(path::default_workshop_path()));
 
-    let raw_output_path = wallpaper.get("raw_output_path")
+    let raw_output_path = wallpaper
+        .get("raw_output_path")
         .and_then(|v| v.as_str())
         .map(|s| path::expand_path(s))
         .unwrap_or_else(|| PathBuf::from(path::default_raw_output_path()));
 
-    let enable_raw_output = wallpaper.get("enable_raw_output")
+    let enable_raw_output = wallpaper
+        .get("enable_raw_output")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
-    let pkg_temp_path = wallpaper.get("pkg_temp_path")
+    let pkg_temp_path = wallpaper
+        .get("pkg_temp_path")
         .and_then(|v| v.as_str())
         .map(|s| path::expand_path(s))
         .unwrap_or_else(|| PathBuf::from(path::default_pkg_temp_path()));
 
     // 解析 [unpack] 部分
-    let unpack = doc.get("unpack")
-        .and_then(|v| v.as_table());
+    let unpack = doc.get("unpack").and_then(|v| v.as_table());
 
     let unpacked_output_path = unpack
         .and_then(|u| u.get("unpacked_output_path"))
@@ -389,8 +387,7 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
         .unwrap_or(true);
 
     // 解析 [tex] 部分
-    let tex = doc.get("tex")
-        .and_then(|v| v.as_table());
+    let tex = doc.get("tex").and_then(|v| v.as_table());
 
     let converted_output_path = tex
         .and_then(|t| t.get("converted_output_path"))
@@ -399,8 +396,7 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
         .map(|s| path::expand_path(s));
 
     // 解析 [pipeline] 部分
-    let pipeline_section = doc.get("pipeline")
-        .and_then(|v| v.as_table());
+    let pipeline_section = doc.get("pipeline").and_then(|v| v.as_table());
 
     let pipeline = PipelineConfig {
         incremental: pipeline_section
