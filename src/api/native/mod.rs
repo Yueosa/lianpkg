@@ -68,88 +68,120 @@
 
 pub mod cfg;
 pub mod paper;
+pub mod pipeline;
 pub mod pkg;
 pub mod tex;
-pub mod pipeline;
 
 // ============================================================================
 // 导出配置模块
 // ============================================================================
 pub use cfg::{
-    // 结构体
-    InitConfigInput, InitConfigOutput,
-    RuntimeConfig, PipelineConfig,
-    LoadConfigInput, LoadConfigOutput,
-    LoadStateInput, LoadStateOutput,
-    SaveStateInput, SaveStateOutput,
+    add_processed_wallpaper,
     // 接口
     init_config,
+    is_wallpaper_processed,
     load_config,
     load_state,
     save_state,
-    is_wallpaper_processed,
-    add_processed_wallpaper,
     update_statistics,
+    // 结构体
+    InitConfigInput,
+    InitConfigOutput,
+    LoadConfigInput,
+    LoadConfigOutput,
+    LoadStateInput,
+    LoadStateOutput,
+    PipelineConfig,
+    RuntimeConfig,
+    SaveStateInput,
+    SaveStateOutput,
 };
 
 // ============================================================================
 // 导出壁纸模块
 // ============================================================================
 pub use paper::{
-    // 结构体
-    ScanWallpapersInput, ScanWallpapersOutput,
-    WallpaperInfo, ScanStats,
-    CopyWallpapersInput, CopyWallpapersOutput,
-    CopyResult, CopyResultType, CopyStats,
-    // 接口
-    scan_wallpapers,
     copy_wallpapers,
     get_wallpaper_detail,
+    // 接口
+    scan_wallpapers,
+    CopyResult,
+    CopyResultType,
+    CopyStats,
+    CopyWallpapersInput,
+    CopyWallpapersOutput,
+    ScanStats,
+    // 结构体
+    ScanWallpapersInput,
+    ScanWallpapersOutput,
+    WallpaperInfo,
 };
 
 // ============================================================================
 // 导出 PKG 模块
 // ============================================================================
 pub use pkg::{
-    // 结构体
-    UnpackAllInput, UnpackAllOutput,
-    UnpackResult, UnpackedFile, UnpackStats,
-    PreviewPkgInput, PreviewPkgOutput,
-    PkgPreview, PkgFileEntry,
+    get_tex_files_from_unpacked,
+    preview_pkg,
     // 接口
     unpack_all,
-    preview_pkg,
     unpack_single,
-    get_tex_files_from_unpacked,
+    PkgFileEntry,
+    PkgPreview,
+    PreviewPkgInput,
+    PreviewPkgOutput,
+    // 结构体
+    UnpackAllInput,
+    UnpackAllOutput,
+    UnpackResult,
+    UnpackStats,
+    UnpackedFile,
 };
 
 // ============================================================================
 // 导出 TEX 模块
 // ============================================================================
 pub use tex::{
-    // 结构体
-    ConvertAllInput, ConvertAllOutput,
-    ConvertResult, ConvertStats,
-    PreviewTexInput, PreviewTexOutput,
-    TexPreview,
     // 接口
     convert_all,
-    preview_tex,
     convert_single,
+    preview_tex,
+    // 结构体
+    ConvertAllInput,
+    ConvertAllOutput,
+    ConvertResult,
+    ConvertStats,
+    PreviewTexInput,
+    PreviewTexOutput,
+    TexPreview,
 };
 
 // ============================================================================
 // 导出流水线模块
 // ============================================================================
 pub use pipeline::{
-    // 结构体
-    RunPipelineInput, RunPipelineOutput,
-    PipelineStats, PipelineProgress, PipelineStage,
-    PipelineOverrides,
-    QuickRunInput, QuickRunOutput,
+    clean_unpacked_dir,
+    copy_metadata_to_tex_converted,
+    estimate_disk_usage,
+    quick_run,
     // 接口
     run_pipeline,
-    quick_run,
     run_pkg_only,
     run_tex_only,
+    DebugLogCallback,
+    DebugLogEvent,
+    DebugLogType,
+    EstimateDiskInput,
+    EstimateDiskOutput,
+    PipelineOverrides,
+    PipelineProgress,
+    PipelineStage,
+    PipelineStats,
+    // 回调类型
+    ProgressCallback,
+    QuickRunInput,
+    QuickRunOutput,
+    // 结构体
+    RunPipelineInput,
+    RunPipelineOutput,
 };

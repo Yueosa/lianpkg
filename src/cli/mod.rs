@@ -3,12 +3,12 @@
 //! 解析命令行参数并分发到对应的处理器
 
 pub mod args;
-pub mod output;
-pub mod logger;
 pub mod handlers;
+pub mod logger;
+pub mod output;
 
-use clap::Parser;
 use args::{Cli, Command};
+use clap::Parser;
 
 /// CLI 入口函数
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,24 +24,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // 分发命令
     let result = match cli.command {
-        Some(Command::Wallpaper(ref args)) => {
-            handlers::wallpaper::run(args, config_path)
-        }
-        Some(Command::Pkg(ref args)) => {
-            handlers::pkg::run(args, config_path)
-        }
-        Some(Command::Tex(ref args)) => {
-            handlers::tex::run(args, config_path)
-        }
-        Some(Command::Auto(ref args)) => {
-            handlers::auto::run(args, config_path)
-        }
-        Some(Command::Config(ref args)) => {
-            handlers::config::run(args, config_path)
-        }
-        Some(Command::Status(ref args)) => {
-            handlers::status::run(args, config_path)
-        }
+        Some(Command::Wallpaper(ref args)) => handlers::wallpaper::run(args, config_path),
+        Some(Command::Pkg(ref args)) => handlers::pkg::run(args, config_path),
+        Some(Command::Tex(ref args)) => handlers::tex::run(args, config_path),
+        Some(Command::Auto(ref args)) => handlers::auto::run(args, config_path),
+        Some(Command::Config(ref args)) => handlers::config::run(args, config_path),
+        Some(Command::Status(ref args)) => handlers::status::run(args, config_path),
         None => {
             // Windows 下无参数时，默认执行 auto 模式
             #[cfg(target_os = "windows")]
@@ -72,4 +60,3 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     output::press_enter_to_exit_with_config(config_path_for_display.as_deref());
     Ok(())
 }
-

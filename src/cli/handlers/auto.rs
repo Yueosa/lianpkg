@@ -1,14 +1,12 @@
 //! Auto 模式处理器（全自动流水线）
 //!
-//! 直接调用各 API 执行 paper → pkg → tex 流程
+//! 调用 api::pipeline 执行完整的 paper → pkg → tex 流程
 //! 支持 -d 调试追踪和 -q 精简输出
 
 use super::super::args::AutoArgs;
 use super::super::logger;
 use super::super::output as out;
-use lianpkg::api::native::{self, paper, pkg, tex};
-use lianpkg::core::cfg;
-use lianpkg::core::paper as core_paper;
+use lianpkg::api::native::{self, paper, pipeline};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -59,10 +57,8 @@ pub fn run(args: &AutoArgs, config_path: Option<PathBuf>) -> Result<(), String> 
     // ========== 交互式确认模式 ==========
     // 非 quiet 模式下，先执行 dry-run 展示，让用户确认路径后再执行
     if !args.quiet {
-        // 先展示 dry-run 信息
         run_dry_run_preview(&config, args, &init_result.state_path)?;
 
-        // 询问用户是否继续
         println!();
         if !out::confirm("Continue with the execution?") {
             out::info("Operation cancelled by user.");
@@ -70,6 +66,9 @@ pub fn run(args: &AutoArgs, config_path: Option<PathBuf>) -> Result<(), String> 
         }
         println!();
     }
+
+    // ========== 阶段2: 磁盘空间预估 ==========
+    let disk_info = estimate_disk_usage(&config, args.quiet)?;
 
     // ========== 显示配置 ==========
     if !args.quiet {
@@ -90,233 +89,42 @@ pub fn run(args: &AutoArgs, config_path: Option<PathBuf>) -> Result<(), String> 
 
         show_config(&config);
         println!();
-    }
-
-    // ========== 阶段2: 磁盘空间预估 ==========
-    let disk_info = estimate_disk_usage(&config, args.quiet)?;
-
-    // ========== 阶段3: 加载状态（增量处理） ==========
-    out::debug_api_enter(
-        "native",
-        "load_state",
-        &format!("path={}", init_result.state_path.display()),
-    );
-    let state_result = native::load_state(native::LoadStateInput {
-        state_path: init_result.state_path.clone(),
-    });
-    let mut state = state_result.state.unwrap_or_default();
-    out::debug_api_return(&format!(
-        "processed_count={}",
-        state.processed_wallpapers.len()
-    ));
-
-    // ========== 阶段4: 扫描壁纸 ==========
-    if !args.quiet {
         out::subtitle("Executing Pipeline");
-        out::progress("Scanning wallpapers...", 0, 100);
     }
 
-    out::debug_api_enter(
-        "paper",
-        "scan_wallpapers",
-        &format!("path={}", config.workshop_path.display()),
-    );
-    let scan_result = paper::scan_wallpapers(paper::ScanWallpapersInput {
-        workshop_path: config.workshop_path.clone(),
-    });
+    // ========== 阶段3: 执行流水线 ==========
+    // 构建参数覆盖
+    let overrides = build_pipeline_overrides(args);
 
-    if !scan_result.success {
-        out::debug_api_error("Failed to scan wallpapers");
-        return Err("Failed to scan wallpapers".to_string());
-    }
-    out::debug_api_return(&format!(
-        "total={}, pkg={}, raw={}",
-        scan_result.stats.total_count, scan_result.stats.pkg_count, scan_result.stats.raw_count
-    ));
-
-    // 筛选待处理的壁纸
-    let wallpapers_to_process: Vec<String> = filter_wallpapers(
-        &scan_result.wallpapers,
-        &state,
-        args.ids.as_ref(),
-        config.pipeline.incremental,
-    );
-
-    let wallpapers_skipped = scan_result.wallpapers.len() - wallpapers_to_process.len();
-    out::debug_verbose(
-        "Filter",
-        &format!(
-            "to_process={}, skipped={}",
-            wallpapers_to_process.len(),
-            wallpapers_skipped
-        ),
-    );
-
-    // ========== 阶段5: 复制壁纸 ==========
-    if !args.quiet {
-        out::progress("Copying wallpapers...", 20, 100);
-    }
-
-    out::debug_api_enter(
-        "paper",
-        "copy_wallpapers",
-        &format!(
-            "count={}, enable_raw={}",
-            wallpapers_to_process.len(),
-            config.enable_raw_output
-        ),
-    );
-    let paper_result = paper::copy_wallpapers(paper::CopyWallpapersInput {
-        wallpaper_ids: Some(wallpapers_to_process.clone()),
-        workshop_path: config.workshop_path.clone(),
-        raw_output_path: config.raw_output_path.clone(),
-        pkg_temp_path: config.pkg_temp_path.clone(),
-        enable_raw: config.enable_raw_output,
-    });
-    out::debug_api_return(&format!(
-        "raw={}, pkg={}, skipped={}",
-        paper_result.stats.raw_copied, paper_result.stats.pkg_copied, paper_result.stats.skipped
-    ));
-
-    // 更新状态
-    for result in &paper_result.results {
-        let process_type = match result.result_type {
-            paper::CopyResultType::Raw => cfg::WallpaperProcessType::Raw,
-            paper::CopyResultType::Pkg => cfg::WallpaperProcessType::Pkg,
-            paper::CopyResultType::Skipped => cfg::WallpaperProcessType::Skipped,
-        };
-        native::add_processed_wallpaper(
-            &mut state,
-            result.wallpaper_id.clone(),
-            result.title.clone(),
-            process_type,
-            None,
-        );
-    }
-
-    // ========== 阶段6: 解包 PKG ==========
-    let pkg_result = if config.pipeline.auto_unpack_pkg && paper_result.stats.pkg_copied > 0 {
-        if !args.quiet {
-            out::progress("Unpacking PKG files...", 40, 100);
+    // 定义进度回调
+    let progress_callback = |progress: pipeline::PipelineProgress| {
+        if !logger::is_quiet() {
+            out::progress(&progress.message, progress.progress.into(), 100);
         }
-
-        out::debug_api_enter(
-            "pkg",
-            "unpack_all",
-            &format!(
-                "input={}, output={}",
-                config.pkg_temp_path.display(),
-                config.unpacked_output_path.display()
-            ),
-        );
-        let result = pkg::unpack_all(pkg::UnpackAllInput {
-            pkg_temp_path: config.pkg_temp_path.clone(),
-            unpacked_output_path: config.unpacked_output_path.clone(),
-        });
-        out::debug_api_return(&format!(
-            "success={}, failed={}, files={}, tex={}",
-            result.stats.pkg_success,
-            result.stats.pkg_failed,
-            result.stats.total_files,
-            result.stats.tex_files
-        ));
-        Some(result)
-    } else {
-        None
     };
 
-    // ========== 阶段7: 转换 TEX ==========
-    let tex_result = if config.pipeline.auto_convert_tex {
-        let should_convert = pkg_result
-            .as_ref()
-            .map(|r| r.stats.tex_files > 0)
-            .unwrap_or(false);
+    // 定义 debug 日志回调
+    let debug_callback = |event: pipeline::DebugLogEvent| {
+        render_debug_event(&event);
+    };
 
-        if should_convert {
-            if !args.quiet {
-                out::progress("Converting TEX files...", 60, 100);
-            }
-
-            out::debug_api_enter(
-                "tex",
-                "convert_all",
-                &format!(
-                    "input={}, output={:?}",
-                    config.unpacked_output_path.display(),
-                    config.converted_output_path
-                ),
-            );
-            let result = tex::convert_all(tex::ConvertAllInput {
-                unpacked_path: config.unpacked_output_path.clone(),
-                output_path: config.converted_output_path.clone(),
-            });
-            out::debug_api_return(&format!(
-                "success={}, failed={}, images={}, videos={}",
-                result.stats.tex_success,
-                result.stats.tex_failed,
-                result.stats.image_count,
-                result.stats.video_count
-            ));
-            Some(result)
+    // 调用 pipeline API
+    let result = pipeline::run_pipeline(pipeline::RunPipelineInput {
+        config: config.clone(),
+        state_path: init_result.state_path,
+        wallpaper_ids: args.ids.clone(),
+        overrides: Some(overrides),
+        progress_callback: if args.quiet {
+            None
+        } else {
+            Some(&progress_callback)
+        },
+        debug_logger: if logger::is_debug() {
+            Some(&debug_callback)
         } else {
             None
-        }
-    } else {
-        None
-    };
-
-    // ========== 阶段7.5: 复制元数据到 tex_converted ==========
-    if tex_result.is_some() {
-        if !args.quiet {
-            out::progress("Copying metadata...", 70, 100);
-        }
-        out::debug_api_enter(
-            "metadata",
-            "copy_to_tex_converted",
-            &format!(
-                "source={}, dest={}",
-                config.workshop_path.display(),
-                config.unpacked_output_path.display()
-            ),
-        );
-        copy_metadata_to_tex_converted(&config);
-        out::debug_api_return("done");
-    }
-
-    // ========== 阶段8: 清理 ==========
-    if config.clean_pkg_temp {
-        if !args.quiet {
-            out::progress("Cleaning PKG temp...", 80, 100);
-        }
-        out::debug_api_enter(
-            "cleanup",
-            "pkg_temp",
-            &config.pkg_temp_path.display().to_string(),
-        );
-        let _ = std::fs::remove_dir_all(&config.pkg_temp_path);
-        out::debug_api_return("done");
-    }
-
-    if config.clean_unpacked {
-        if !args.quiet {
-            out::progress("Cleaning unpacked...", 90, 100);
-        }
-        out::debug_api_enter("cleanup", "unpacked", "keeping tex_converted");
-        cleanup_unpacked(&config.unpacked_output_path);
-        out::debug_api_return("done");
-    }
-
-    // ========== 阶段9: 保存状态 ==========
-    out::debug_api_enter(
-        "native",
-        "save_state",
-        &init_result.state_path.display().to_string(),
-    );
-    let _ = native::save_state(native::SaveStateInput {
-        state_path: init_result.state_path,
-        state: state.clone(),
+        },
     });
-    out::debug_api_return("done");
 
     // ========== 计算耗时 ==========
     let elapsed_secs = start_time.elapsed().as_secs_f64();
@@ -327,26 +135,18 @@ pub fn run(args: &AutoArgs, config_path: Option<PathBuf>) -> Result<(), String> 
         println!();
     }
 
+    // ========== 检查结果 ==========
+    if !result.success {
+        return Err(result
+            .error
+            .unwrap_or_else(|| "Pipeline failed".to_string()));
+    }
+
     // ========== 输出结果 ==========
     if args.quiet {
-        // -q 精简输出
-        print_quiet_summary(
-            &config,
-            &paper_result,
-            pkg_result.as_ref(),
-            tex_result.as_ref(),
-            elapsed_secs,
-            &disk_info,
-        );
+        print_quiet_summary(&config, &result, elapsed_secs, &disk_info);
     } else {
-        // 正常输出
-        print_full_summary(
-            &paper_result,
-            pkg_result.as_ref(),
-            tex_result.as_ref(),
-            wallpapers_skipped,
-            elapsed_secs,
-        );
+        print_full_summary(&result, elapsed_secs);
     }
 
     // 重置 quiet 模式
@@ -388,189 +188,88 @@ fn apply_cli_overrides(config: &mut native::RuntimeConfig, args: &AutoArgs) {
     }
 }
 
-/// 筛选待处理的壁纸
-fn filter_wallpapers(
-    wallpapers: &[paper::WallpaperInfo],
-    state: &cfg::StateData,
-    ids: Option<&Vec<String>>,
-    incremental: bool,
-) -> Vec<String> {
-    wallpapers
-        .iter()
-        .filter(|w| {
-            // 检查是否在指定列表中
-            let in_list = match ids {
-                Some(filter_ids) => filter_ids.contains(&w.wallpaper_id),
-                None => true,
-            };
-            // 增量模式检查是否已处理
-            let not_processed = if incremental {
-                !native::is_wallpaper_processed(state, &w.wallpaper_id)
-            } else {
-                true
-            };
-            in_list && not_processed
-        })
-        .map(|w| w.wallpaper_id.clone())
-        .collect()
+/// 构建 pipeline 参数覆盖
+fn build_pipeline_overrides(args: &AutoArgs) -> pipeline::PipelineOverrides {
+    pipeline::PipelineOverrides {
+        workshop_path: args.search.clone(),
+        raw_output_path: args.raw_output.clone(),
+        pkg_temp_path: args.pkg_temp.clone(),
+        unpacked_output_path: args.unpacked_output.clone(),
+        tex_output_path: args.tex_output.clone(),
+        enable_raw: if args.no_raw { Some(false) } else { None },
+        clean_pkg_temp: if args.no_clean_temp {
+            Some(false)
+        } else {
+            None
+        },
+        clean_unpacked: if args.no_clean_unpacked {
+            Some(false)
+        } else {
+            None
+        },
+        incremental: Some(args.incremental),
+        auto_convert_tex: if args.no_tex { Some(false) } else { None },
+    }
 }
 
-/// 清理 unpacked 目录（保留 tex_converted）
-fn cleanup_unpacked(unpacked_path: &PathBuf) {
-    if let Ok(entries) = std::fs::read_dir(unpacked_path) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                // 遍历壁纸目录
-                if let Ok(sub_entries) = std::fs::read_dir(&path) {
-                    for sub_entry in sub_entries.flatten() {
-                        let sub_path = sub_entry.path();
-                        let name = sub_path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_default();
-                        // 保留 tex_converted 目录
-                        if name != "tex_converted" {
-                            let _ = if sub_path.is_dir() {
-                                std::fs::remove_dir_all(&sub_path)
-                            } else {
-                                std::fs::remove_file(&sub_path)
-                            };
-                        }
-                    }
-                }
-            }
+/// 渲染 debug 日志事件
+fn render_debug_event(event: &pipeline::DebugLogEvent) {
+    match event.event_type {
+        pipeline::DebugLogType::Enter => {
+            out::debug_api_enter(&event.module, &event.function, &event.details);
+        }
+        pipeline::DebugLogType::Return => {
+            out::debug_api_return(&event.details);
+        }
+        pipeline::DebugLogType::Error => {
+            out::debug_api_error(&event.details);
         }
     }
 }
 
-/// 将 project.json、preview 等元数据文件复制到对应的 tex_converted 目录
-///
-/// - 源：workshop_path/壁纸ID/project.json
-/// - 目标：Pkg_Unpacked/壁纸ID/tex_converted/project.json
-fn copy_metadata_to_tex_converted(config: &native::RuntimeConfig) {
-    use std::fs;
-
-    let workshop_path = &config.workshop_path;
-    let unpacked_path = &config.unpacked_output_path;
-
-    // 遍历 Pkg_Unpacked 目录下的所有壁纸目录
-    if let Ok(entries) = fs::read_dir(unpacked_path) {
-        for entry in entries.flatten() {
-            let wallpaper_dir = entry.path();
-            if !wallpaper_dir.is_dir() {
-                continue;
-            }
-
-            // 获取壁纸 ID（目录名）
-            let wallpaper_id = match wallpaper_dir.file_name().and_then(|n| n.to_str()) {
-                Some(name) => name.to_string(),
-                None => continue,
-            };
-
-            // 检查是否有 tex_converted 子目录
-            let tex_dest_dir = wallpaper_dir.join("tex_converted");
-            if !tex_dest_dir.exists() {
-                continue;
-            }
-
-            // 源壁纸目录（Steam Workshop）
-            let source_dir = workshop_path.join(&wallpaper_id);
-            if !source_dir.exists() {
-                continue;
-            }
-
-            // 基础元数据文件（总是尝试复制）
-            let base_files = ["project.json", "scene.json"];
-            for filename in &base_files {
-                let src = source_dir.join(filename);
-                if src.exists() {
-                    let dest = tex_dest_dir.join(filename);
-                    let _ = fs::copy(&src, &dest);
-                }
-            }
-
-            // 从 project.json 读取预览图文件名
-            let project_path = source_dir.join("project.json");
-            if let Ok(content) = fs::read_to_string(&project_path) {
-                if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) {
-                    // 复制 preview 字段指定的文件
-                    if let Some(preview) = meta.get("preview").and_then(|v| v.as_str()) {
-                        let src = source_dir.join(preview);
-                        if src.exists() {
-                            let dest = tex_dest_dir.join(preview);
-                            let _ = fs::copy(&src, &dest);
-                        }
-                    }
-                }
-            }
-        }
-    }
+/// 磁盘预估信息
+struct DiskEstimate {
+    estimated_peak: u64,
 }
 
-/// 磁盘信息
-struct DiskInfo {
-    #[allow(dead_code)]
-    pkg_size: u64,
-    #[allow(dead_code)]
-    raw_size: u64,
-    peak_usage: u64,
-}
-
-/// 磁盘空间预估
-fn estimate_disk_usage(config: &native::RuntimeConfig, quiet: bool) -> Result<DiskInfo, String> {
+/// 磁盘空间预估（使用 pipeline API）
+fn estimate_disk_usage(
+    config: &native::RuntimeConfig,
+    quiet: bool,
+) -> Result<DiskEstimate, String> {
     if !quiet {
         out::subtitle_icon("📊", "Disk Usage Estimation");
     }
 
-    let estimate_result = core_paper::estimate(core_paper::EstimateInput {
-        search_path: config.workshop_path.clone(),
-        enable_raw: config.enable_raw_output,
+    // 调用 pipeline API 进行磁盘预估
+    let estimate = pipeline::estimate_disk_usage(pipeline::EstimateDiskInput {
+        config: config.clone(),
     });
 
-    let pkg_size = estimate_result.pkg_size;
-    let raw_size = estimate_result.raw_size;
-
-    let est_pkg_temp = pkg_size;
-    let est_unpacked = (pkg_size as f64 * 1.5) as u64;
-    let est_converted = (pkg_size as f64 * 2.0) as u64;
-
-    let peak_usage = est_pkg_temp + est_unpacked + est_converted + raw_size;
-    let final_usage = raw_size
-        + est_converted
-        + if config.clean_unpacked {
-            0
-        } else {
-            est_unpacked
-        }
-        + if config.clean_pkg_temp {
-            0
-        } else {
-            est_pkg_temp
-        };
-
     if !quiet {
-        out::stat_icon("📦", "PKG Files", out::format_size(pkg_size));
+        out::stat_icon("📦", "PKG Files", out::format_size(estimate.pkg_size));
         if config.enable_raw_output {
-            out::stat_icon("🖼", "Raw Files", out::format_size(raw_size));
+            out::stat_icon("🖼", "Raw Files", out::format_size(estimate.raw_size));
         }
-        out::stat_icon("📈", "Estimated Peak", out::format_size(peak_usage));
-        out::stat_icon("📉", "Estimated Final", out::format_size(final_usage));
-    }
+        out::stat_icon(
+            "📈",
+            "Estimated Peak",
+            out::format_size(estimate.estimated_peak),
+        );
+        out::stat_icon(
+            "📉",
+            "Estimated Final",
+            out::format_size(estimate.estimated_final),
+        );
 
-    // 检查可用空间
-    let check_path = find_existing_parent(&config.unpacked_output_path);
-    if let Some(ref p) = check_path {
-        if let Ok(available) = fs2::available_space(p) {
-            if !quiet {
-                out::stat_icon("💾", "Available Space", out::format_size(available));
-            }
+        if let Some(available) = estimate.available_space {
+            out::stat_icon("💾", "Available Space", out::format_size(available));
 
-            if available < peak_usage {
+            if !estimate.space_sufficient {
                 out::warning("Insufficient disk space!");
                 out::warning(&format!(
                     "Required: {}, Available: {}",
-                    out::format_size(peak_usage),
+                    out::format_size(estimate.estimated_peak),
                     out::format_size(available)
                 ));
 
@@ -581,58 +280,40 @@ fn estimate_disk_usage(config: &native::RuntimeConfig, quiet: bool) -> Result<Di
                 out::success("Disk space OK");
             }
         }
-    }
-
-    if !quiet {
         println!();
     }
 
-    Ok(DiskInfo {
-        pkg_size,
-        raw_size,
-        peak_usage,
+    Ok(DiskEstimate {
+        estimated_peak: estimate.estimated_peak,
     })
-}
-
-/// 查找存在的父目录
-fn find_existing_parent(path: &std::path::Path) -> Option<PathBuf> {
-    let mut check_path = path.to_path_buf();
-    while !check_path.exists() {
-        if let Some(parent) = check_path.parent() {
-            check_path = parent.to_path_buf();
-        } else {
-            return None;
-        }
-    }
-    Some(check_path)
 }
 
 /// -q 精简输出
 fn print_quiet_summary(
     config: &native::RuntimeConfig,
-    paper_result: &paper::CopyWallpapersOutput,
-    pkg_result: Option<&pkg::UnpackAllOutput>,
-    tex_result: Option<&tex::ConvertAllOutput>,
+    result: &pipeline::RunPipelineOutput,
     elapsed_secs: f64,
-    disk_info: &DiskInfo,
+    disk_info: &DiskEstimate,
 ) {
-    // 格式: LianPkg v0.4.3 | 36 wallpapers | ~5.07 GB peak
     let version = env!("CARGO_PKG_VERSION");
-    let wallpaper_count = paper_result.stats.raw_copied + paper_result.stats.pkg_copied;
+    let wallpaper_count = result.stats.wallpapers_processed;
+
     println!(
         "LianPkg v{} | {} wallpapers | ~{} peak",
         version,
         wallpaper_count,
-        out::format_size(disk_info.peak_usage)
+        out::format_size(disk_info.estimated_peak)
     );
 
-    // 输出路径
     println!("Output: {}", config.unpacked_output_path.display());
 
-    // 格式: Done in 45.2s | 21 PKG → 206 TEX → 196 images
-    let pkg_count = pkg_result.map(|r| r.stats.pkg_success).unwrap_or(0);
-    let tex_count = tex_result.map(|r| r.stats.tex_success).unwrap_or(0);
-    let image_count = tex_result.map(|r| r.stats.image_count).unwrap_or(0);
+    let pkg_count = result.stats.pkgs_unpacked;
+    let tex_count = result.stats.texs_converted;
+    let image_count = result
+        .tex_result
+        .as_ref()
+        .map(|r| r.stats.image_count)
+        .unwrap_or(0);
 
     println!(
         "Done in {:.1}s | {} PKG → {} TEX → {} images",
@@ -641,32 +322,26 @@ fn print_quiet_summary(
 }
 
 /// 完整输出
-fn print_full_summary(
-    paper_result: &paper::CopyWallpapersOutput,
-    pkg_result: Option<&pkg::UnpackAllOutput>,
-    tex_result: Option<&tex::ConvertAllOutput>,
-    wallpapers_skipped: usize,
-    elapsed_secs: f64,
-) {
+fn print_full_summary(result: &pipeline::RunPipelineOutput, elapsed_secs: f64) {
     out::title("Summary Report");
 
     out::subtitle("Wallpaper Extraction");
-    out::stat(
-        "Processed",
-        paper_result.stats.raw_copied + paper_result.stats.pkg_copied,
-    );
-    out::stat("Skipped (incremental)", wallpapers_skipped);
-    out::stat("Raw Copied", paper_result.stats.raw_copied);
-    out::stat("PKG Copied", paper_result.stats.pkg_copied);
+    out::stat("Processed", result.stats.wallpapers_processed);
+    out::stat("Skipped (incremental)", result.stats.wallpapers_skipped);
 
-    if let Some(pkg_res) = pkg_result {
+    if let Some(ref paper_res) = result.paper_result {
+        out::stat("Raw Copied", paper_res.stats.raw_copied);
+        out::stat("PKG Copied", paper_res.stats.pkg_copied);
+    }
+
+    if let Some(ref pkg_res) = result.pkg_result {
         out::subtitle("PKG Unpack");
         out::stat("PKGs Unpacked", pkg_res.stats.pkg_success);
         out::stat("Files Extracted", pkg_res.stats.total_files);
         out::stat("TEX Files", pkg_res.stats.tex_files);
     }
 
-    if let Some(tex_res) = tex_result {
+    if let Some(ref tex_res) = result.tex_result {
         out::subtitle("TEX Conversion");
         out::stat("TEXs Converted", tex_res.stats.tex_success);
         out::stat("Images", tex_res.stats.image_count);
@@ -740,7 +415,7 @@ fn run_dry_run(
     // 增量处理统计
     if args.incremental {
         let state_result = native::load_state(native::LoadStateInput {
-            state_path: (*state_path).to_path_buf(),
+            state_path: state_path.to_path_buf(),
         });
 
         if let Some(state) = state_result.state {
@@ -773,58 +448,7 @@ fn run_dry_run(
     estimate_disk_usage(config, false)?;
 
     // 执行计划
-    out::subtitle_icon("📝", "Execution Plan");
-
-    let mut step = 1;
-
-    if config.enable_raw_output {
-        out::step(
-            step,
-            &format!(
-                "Copy raw wallpapers to {}",
-                config.raw_output_path.display()
-            ),
-        );
-        step += 1;
-    }
-
-    out::step(
-        step,
-        &format!("Copy PKG files to {}", config.pkg_temp_path.display()),
-    );
-    step += 1;
-
-    if config.pipeline.auto_unpack_pkg {
-        out::step(
-            step,
-            &format!(
-                "Unpack PKG files to {}",
-                config.unpacked_output_path.display()
-            ),
-        );
-        step += 1;
-    }
-
-    if config.pipeline.auto_convert_tex {
-        let tex_out = config
-            .converted_output_path
-            .as_ref()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|| {
-                format!("{}/*/tex_converted", config.unpacked_output_path.display())
-            });
-        out::step(step, &format!("Convert TEX files to {}", tex_out));
-        step += 1;
-    }
-
-    if config.clean_pkg_temp {
-        out::step(step, "Clean PKG temp directory");
-        step += 1;
-    }
-
-    if config.clean_unpacked {
-        out::step(step, "Clean unpacked directory (except tex_converted)");
-    }
+    show_execution_plan(config);
 
     println!();
     out::success("Dry run completed. Run without --dry-run to execute.");
@@ -833,7 +457,6 @@ fn run_dry_run(
 }
 
 /// 交互式预览模式（用于执行前确认）
-/// 与 dry_run 类似，但不显示最终的 "Dry run completed" 消息
 fn run_dry_run_preview(
     config: &native::RuntimeConfig,
     args: &AutoArgs,
@@ -902,10 +525,17 @@ fn run_dry_run_preview(
         }
     }
 
-    // 磁盘预估
+    // 磁盘预估（使用 pipeline API）
     estimate_disk_usage(config, false)?;
 
     // 执行计划
+    show_execution_plan(config);
+
+    Ok(())
+}
+
+/// 显示执行计划
+fn show_execution_plan(config: &native::RuntimeConfig) {
     out::subtitle_icon("📝", "Execution Plan");
 
     let mut step = 1;
@@ -958,6 +588,4 @@ fn run_dry_run_preview(
     if config.clean_unpacked {
         out::step(step, "Clean unpacked directory (except tex_converted)");
     }
-
-    Ok(())
 }
