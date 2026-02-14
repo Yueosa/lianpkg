@@ -295,26 +295,74 @@ fn handle_status() -> FfiResponse {
     };
 
     let state = context::load_state_or_default(&ctx.state_path);
-    let estimate = auto::estimate_disk_usage(&ctx.config);
 
-    // 统计各类型数量
-    let mut pkg_count = 0usize;
-    let mut raw_count = 0usize;
-    let mut skipped_count = 0usize;
+    // 扫描当前壁纸目录，与 state 交叉对比
+    let scan_result = match scan::scan_workshop(&ctx.config.workshop_path, Some(&state)) {
+        Ok(r) => r,
+        Err(e) => return FfiResponse::error(format!("Scan failed: {}", e)),
+    };
+
+    // 已处理统计（来自 state）
+    let mut processed_pkg = 0usize;
+    let mut processed_raw = 0usize;
+    let mut processed_skipped = 0usize;
     for info in state.processed.values() {
         match info.process_type {
-            ProcessType::Pkg | ProcessType::PkgTex => pkg_count += 1,
-            ProcessType::Raw => raw_count += 1,
-            ProcessType::Skipped => skipped_count += 1,
+            ProcessType::Pkg | ProcessType::PkgTex => processed_pkg += 1,
+            ProcessType::Raw => processed_raw += 1,
+            ProcessType::Skipped => processed_skipped += 1,
         }
     }
 
+    // 待处理统计（扫描结果中未处理的）
+    let mut pending_pkg = 0usize;
+    let mut pending_raw = 0usize;
+    let mut pending_pkg_size: u64 = 0;
+    for w in &scan_result.wallpapers {
+        if !w.is_processed {
+            if w.has_pkg {
+                pending_pkg += 1;
+                for pkg_path in &w.pkg_files {
+                    if let Ok(meta) = std::fs::metadata(pkg_path) {
+                        pending_pkg_size += meta.len();
+                    }
+                }
+            } else {
+                pending_raw += 1;
+            }
+        }
+    }
+
+    // 实际输出目录大小
+    let raw_output_size = crate::core::disk::get_dir_size(&ctx.config.raw_output_path);
+    let unpacked_output_size = crate::core::disk::get_dir_size(&ctx.config.unpacked_output_path);
+    let converted_output_size = crate::core::disk::get_dir_size(&ctx.config.converted_output_path);
+
+    // 磁盘可用空间
+    let available_space = crate::core::disk::check_space(
+        crate::core::disk::CheckSpaceInput {
+            path: ctx.config.converted_output_path.clone(),
+        },
+    )
+    .ok()
+    .map(|s| s.available);
+
     FfiResponse::success(&serde_json::json!({
+        "total_wallpapers": scan_result.stats.total_count,
         "total_processed": state.processed.len(),
-        "pkg_count": pkg_count,
-        "raw_count": raw_count,
-        "skipped_count": skipped_count,
+        "processed_pkg": processed_pkg,
+        "processed_raw": processed_raw,
+        "processed_skipped": processed_skipped,
+        "pending_total": pending_pkg + pending_raw,
+        "pending_pkg": pending_pkg,
+        "pending_raw": pending_raw,
+        "pending_pkg_size": pending_pkg_size,
         "last_run": state.last_run,
-        "disk_estimate": estimate,
+        "disk_usage": {
+            "raw_output_size": raw_output_size,
+            "unpacked_output_size": unpacked_output_size,
+            "converted_output_size": converted_output_size,
+            "available_space": available_space,
+        },
     }))
 }
