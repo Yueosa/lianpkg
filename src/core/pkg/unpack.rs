@@ -1,15 +1,18 @@
 //! 解包接口 - 解析并解包 pkg 文件
 
 use std::fs;
+use std::path::Path;
 
 use crate::core::error::{CoreError, CoreResult};
 use crate::core::pkg::parse::parse_pkg_data;
 use crate::core::pkg::structs::{
-    ExtractedFile, UnpackEntryInput, UnpackEntryOutput, UnpackPkgInput, UnpackPkgOutput,
+    ExtractedFile, PkgEntry, UnpackEntryInput, UnpackEntryOutput, UnpackPkgInput, UnpackPkgOutput,
 };
 
 /// 解包整个 pkg 文件
-/// 解析元数据并提取所有文件到输出目录
+///
+/// 解析元数据并提取所有文件到输出目录。
+/// 内部使用零拷贝：整个 data 只读一次，entry 直接切片写出。
 pub fn unpack_pkg(input: UnpackPkgInput) -> CoreResult<UnpackPkgOutput> {
     let file_path = input.file_path;
     let output_base = input.output_base;
@@ -20,26 +23,20 @@ pub fn unpack_pkg(input: UnpackPkgInput) -> CoreResult<UnpackPkgOutput> {
         path: Some(file_path.display().to_string()),
     })?;
 
-    // 解析 pkg
+    // 解析 pkg（含完整校验）
     let parse_result = parse_pkg_data(&data)?;
     let pkg_info = parse_result.pkg_info;
     let data_start = pkg_info.data_start;
     let mut extracted_files = Vec::new();
 
-    // 解包每个条目
+    // 解包每个条目（零拷贝：直接从 &data 切片写出）
     for entry in &pkg_info.entries {
         let output_path = output_base.join(&entry.name);
-
-        let result = unpack_entry(UnpackEntryInput {
-            pkg_data: data.clone(),
-            data_start,
-            entry: entry.clone(),
-            output_path: output_path.clone(),
-        })?;
+        write_entry(&data, data_start, entry, &output_path)?;
 
         extracted_files.push(ExtractedFile {
             entry_name: entry.name.clone(),
-            output_path: result.output_path,
+            output_path,
             size: entry.size,
         });
     }
@@ -50,26 +47,36 @@ pub fn unpack_pkg(input: UnpackPkgInput) -> CoreResult<UnpackPkgOutput> {
     })
 }
 
-/// 解包单个条目
-/// 用于精细控制，选择性解包特定文件
+/// 解包单个条目（公开接口，保持向后兼容）
+///
+/// 用于精细控制，选择性解包特定文件。
+/// 内部委托给 `write_entry`，不再额外拷贝数据。
 pub fn unpack_entry(input: UnpackEntryInput) -> CoreResult<UnpackEntryOutput> {
-    let data = &input.pkg_data;
-    let data_start = input.data_start;
-    let entry = &input.entry;
     let output_path = input.output_path;
+    write_entry(&input.pkg_data, input.data_start, &input.entry, &output_path)?;
+    Ok(UnpackEntryOutput { output_path })
+}
 
-    // 计算数据位置
+/// 内部：将单个 entry 的数据切片写入文件
+///
+/// 边界检查已由 `parse_pkg_data` 完成，此处仅做防御性二次检查。
+fn write_entry(
+    data: &[u8],
+    data_start: usize,
+    entry: &PkgEntry,
+    output_path: &Path,
+) -> CoreResult<()> {
     let start = data_start + entry.offset as usize;
     let end = start + entry.size as usize;
 
-    // 边界检查
+    // 防御性边界检查
     if end > data.len() {
-        return Err(CoreError::Validation {
-            message: format!("Entry {} out of bounds", entry.name),
-        });
+        return Err(CoreError::invalid_data(format!(
+            "entry '{}': offset({}) + size({}) exceeds data length({})",
+            entry.name, entry.offset, entry.size, data.len()
+        )));
     }
 
-    // 提取内容
     let content = &data[start..end];
 
     // 确保父目录存在
@@ -81,10 +88,10 @@ pub fn unpack_entry(input: UnpackEntryInput) -> CoreResult<UnpackEntryOutput> {
     }
 
     // 写入文件
-    fs::write(&output_path, content).map_err(|e| CoreError::Io {
+    fs::write(output_path, content).map_err(|e| CoreError::Io {
         message: e.to_string(),
         path: Some(output_path.display().to_string()),
     })?;
 
-    Ok(UnpackEntryOutput { output_path })
+    Ok(())
 }
