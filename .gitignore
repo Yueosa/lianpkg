@@ -13,3 +13,6 @@ avatar-modified.ico
 resources.rc
 resources.o
 libresources.a
+
+# 计划列表
+TODO.md
