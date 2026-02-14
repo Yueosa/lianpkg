@@ -7,12 +7,12 @@ use crate::core::tex::structs::*;
 
 /// 读取 TEX 文件结构
 pub(crate) fn read_tex<R: Read + Seek>(mut reader: R) -> CoreResult<TexFile> {
-    let magic1 = read_null_terminated_string(&mut reader, 16)?;
+    let magic1 = read_n_string(&mut reader, 16)?;
     if magic1 != "TEXV0005" {
         return Err(CoreError::invalid_data(format!("Invalid Magic1: '{}'", magic1)));
     }
 
-    let magic2 = read_null_terminated_string(&mut reader, 16)?;
+    let magic2 = read_n_string(&mut reader, 16)?;
     if magic2 != "TEXI0001" {
         return Err(CoreError::invalid_data(format!("Invalid Magic2: '{}'", magic2)));
     }
@@ -47,7 +47,7 @@ fn read_header<R: Read + Seek>(reader: &mut R) -> CoreResult<TexHeader> {
 }
 
 fn read_image_container<R: Read + Seek>(reader: &mut R, _header: &TexHeader) -> CoreResult<Vec<TexImage>> {
-    let magic = read_fixed_string(reader, 16)?;
+    let magic = read_n_string(reader, 16)?;
     let image_count = reader.read_i32::<LittleEndian>().map_err(read_err)?;
 
     // 合理性检查
@@ -117,7 +117,7 @@ fn read_mipmap<R: Read + Seek>(reader: &mut R, version: i32) -> CoreResult<TexMi
         // V4 specific fields
         let _param1 = reader.read_i32::<LittleEndian>().map_err(read_err)?;
         let _param2 = reader.read_i32::<LittleEndian>().map_err(read_err)?;
-        let _condition_json = read_null_terminated_string(reader, 4096)?;
+        let _condition_json = read_n_string(reader, 0)?;
         let _param3 = reader.read_i32::<LittleEndian>().map_err(read_err)?;
     }
 
@@ -159,24 +159,10 @@ fn read_mipmap<R: Read + Seek>(reader: &mut R, version: i32) -> CoreResult<TexMi
     })
 }
 
-/// 读取固定长度字段：精确消费 `field_size` 字节，在已读字节中找第一个 `\0` 截取字符串。
+/// 读取 null-terminated 字符串，逐字节读取直到遇到 `\0`。
 ///
-/// 消除旧 `read_n_string` 不消费 padding 导致偏移错位的问题。
-fn read_fixed_string<R: Read>(reader: &mut R, field_size: usize) -> CoreResult<String> {
-    let mut buf = vec![0u8; field_size];
-    reader.read_exact(&mut buf).map_err(read_err)?;
-
-    // 找第一个 \0，截取前面部分
-    let end = buf.iter().position(|&b| b == 0).unwrap_or(field_size);
-    String::from_utf8(buf[..end].to_vec()).map_err(|e| {
-        CoreError::invalid_data(format!("read_fixed_string: invalid UTF-8: {}", e))
-    })
-}
-
-/// 读取 null-terminated 字符串（变长），带安全上限。
-///
-/// 用于 V4 mipmap 的 condition_json 等变长字段。
-fn read_null_terminated_string<R: Read>(reader: &mut R, max_bytes: usize) -> CoreResult<String> {
+/// `max_length > 0` 时作为安全上限；`max_length == 0` 表示无限制（用于 V4 condition_json 等变长字段）。
+fn read_n_string<R: Read>(reader: &mut R, max_length: usize) -> CoreResult<String> {
     let mut bytes = Vec::new();
     let mut c = [0u8; 1];
 
@@ -186,16 +172,12 @@ fn read_null_terminated_string<R: Read>(reader: &mut R, max_bytes: usize) -> Cor
             break;
         }
         bytes.push(c[0]);
-        if bytes.len() >= max_bytes {
-            return Err(CoreError::invalid_data(format!(
-                "null-terminated string exceeds {} byte limit", max_bytes
-            )));
+        if max_length > 0 && bytes.len() >= max_length {
+            break;
         }
     }
 
-    String::from_utf8(bytes).map_err(|e| {
-        CoreError::invalid_data(format!("read_null_terminated_string: invalid UTF-8: {}", e))
-    })
+    Ok(String::from_utf8_lossy(&bytes).to_string())
 }
 
 /// 将 `io::Error` 转换为 `CoreError::InvalidData`

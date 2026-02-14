@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 // ============================================================================
 
 /// PKG 文件来源（壁纸 ID + 对应的 Workshop PKG 路径列表）
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PkgSource {
     /// 壁纸 ID（Workshop 文件夹名）
     pub wallpaper_id: String,
@@ -118,7 +118,7 @@ pub fn unpack_all(
     let mut stats = UnpackStats::default();
 
     for source in pkg_sources {
-        let output_dir = unpacked_output_path.join(&source.wallpaper_id);
+        let output_dir = unpacked_output_path.join(&source.wallpaper_id).join("unpacked");
 
         for pkg_path in &source.pkg_paths {
             stats.pkg_processed += 1;
@@ -196,7 +196,7 @@ pub fn unpack_single(pkg_path: &Path, output_base: &Path) -> CoreResult<UnpackRe
             .as_str(),
     );
 
-    let output_dir = output_base.join(&scene_name);
+    let output_dir = output_base.join(&scene_name).join("unpacked");
 
     match pkg::unpack_pkg(pkg::UnpackPkgInput {
         file_path: pkg_path.to_path_buf(),

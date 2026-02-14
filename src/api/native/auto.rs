@@ -32,11 +32,22 @@ pub type ProgressCallback<'a> = &'a dyn Fn(AutoProgress);
 /// 自动模式选项
 ///
 /// CLI/GUI 负责组装好所有参数，API 层不再做二次覆盖。
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AutoOptions<'a> {
     /// 要处理的壁纸 ID 列表，None 表示全部
     pub wallpaper_ids: Option<Vec<String>>,
     /// 进度回调（可选）
+    #[serde(skip)]
     pub progress: Option<ProgressCallback<'a>>,
+}
+
+impl<'a> std::fmt::Debug for AutoOptions<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AutoOptions")
+            .field("wallpaper_ids", &self.wallpaper_ids)
+            .field("progress", &self.progress.as_ref().map(|_| "<callback>"))
+            .finish()
+    }
 }
 
 /// 自动模式输出
@@ -193,12 +204,24 @@ pub fn run_auto(ctx: &AppContext, opts: AutoOptions) -> CoreResult<AutoOutput> {
             native_scan::CopyResultType::Pkg => cfg::ProcessType::Pkg,
             native_scan::CopyResultType::Skipped => cfg::ProcessType::Skipped,
         };
+
+        // 记录实际输出路径
+        let output_path = match result.result_type {
+            native_scan::CopyResultType::Raw => {
+                Some(config.raw_output_path.join(&result.wallpaper_id).display().to_string())
+            }
+            native_scan::CopyResultType::Pkg => {
+                Some(config.unpacked_output_path.join(&result.wallpaper_id).join("tex_converted").display().to_string())
+            }
+            native_scan::CopyResultType::Skipped => None,
+        };
+
         context::add_processed_wallpaper(
             &mut state,
             result.wallpaper_id.clone(),
             result.title.clone(),
             process_type,
-            None,
+            output_path,
         );
     }
 

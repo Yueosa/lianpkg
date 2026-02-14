@@ -14,7 +14,7 @@ use std::path::PathBuf;
 /// 应用上下文
 ///
 /// 在 `init()` 中一次性构建，包含运行时配置和文件路径。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppContext {
     /// 运行时配置（从 config.toml 解析）
     pub config: RuntimeConfig,

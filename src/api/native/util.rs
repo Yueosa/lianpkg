@@ -95,7 +95,7 @@ pub fn copy_metadata_to_tex_converted(config: &RuntimeConfig) {
 
 /// 清理 unpacked 目录（保留 tex_converted）
 ///
-/// 删除 Pkg_Unpacked/壁纸ID/ 下除 tex_converted 以外的文件和目录。
+/// 删除 Pkg_Unpacked/壁纸ID/unpacked/ 子目录，保留 tex_converted。
 pub fn clean_unpacked_dir(unpacked_path: &Path) {
     let entries = match fs::read_dir(unpacked_path) {
         Ok(e) => e,
@@ -105,30 +105,17 @@ pub fn clean_unpacked_dir(unpacked_path: &Path) {
     for entry in entries.flatten() {
         let wallpaper_dir = entry.path();
         if !wallpaper_dir.is_dir() {
-            let _ = fs::remove_file(&wallpaper_dir);
             continue;
         }
 
-        if let Ok(sub_entries) = fs::read_dir(&wallpaper_dir) {
-            for sub_entry in sub_entries.flatten() {
-                let sub_path = sub_entry.path();
-                let name = sub_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-
-                if name == "tex_converted" {
-                    continue;
-                }
-
-                if sub_path.is_dir() {
-                    let _ = fs::remove_dir_all(&sub_path);
-                } else {
-                    let _ = fs::remove_file(&sub_path);
-                }
-            }
+        let unpacked_sub = wallpaper_dir.join("unpacked");
+        if unpacked_sub.exists() {
+            let _ = fs::remove_dir_all(&unpacked_sub);
         }
     }
 }
 
-/// 查找目录下所有 TEX 文件（递归）
+/// 查找目录下所有 TEX 文件（递归，跳过 tex_converted 目录）
 pub fn find_tex_files(dir: &Path) -> Vec<PathBuf> {
     let mut tex_files = Vec::new();
 
@@ -142,7 +129,11 @@ pub fn find_tex_files(dir: &Path) -> Vec<PathBuf> {
                     }
                 }
             } else if path.is_dir() {
-                tex_files.extend(find_tex_files(&path));
+                // 跳过 tex_converted 目录，避免扫描已转换的输出
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name != "tex_converted" {
+                    tex_files.extend(find_tex_files(&path));
+                }
             }
         }
     }
@@ -151,40 +142,37 @@ pub fn find_tex_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// 确定 TEX 输出路径
+///
+/// 输出规则：
+/// - 有自定义输出路径：平坦放入 custom_output
+/// - 无自定义输出：放入 `Pkg_Unpacked/<wallpaper_id>/tex_converted/`——所有 TEX 扁平存放
 pub fn determine_tex_output_path(
     tex_path: &Path,
     unpacked_path: &Path,
     custom_output: &Option<PathBuf>,
 ) -> PathBuf {
-    use crate::core::path;
+    let file_stem = tex_path.file_stem().unwrap_or_default();
 
     match custom_output {
         Some(output_base) => {
-            if let Ok(relative) = tex_path.strip_prefix(unpacked_path) {
-                output_base.join(relative).with_extension("")
-            } else {
-                output_base.join(tex_path.file_stem().unwrap_or_default())
-            }
+            let _ = crate::core::path::ensure_dir_compat(output_base);
+            output_base.join(file_stem)
         }
         None => {
-            let scene_root = if let Ok(relative) = tex_path.strip_prefix(unpacked_path) {
+            // 从 tex_path 中提取 wallpaper_id（unpacked_path 后的第一级目录）
+            let wallpaper_dir = if let Ok(relative) = tex_path.strip_prefix(unpacked_path) {
                 if let Some(first_component) = relative.components().next() {
                     unpacked_path.join(first_component.as_os_str())
                 } else {
-                    unpacked_path.to_path_buf()
+                    tex_path.parent().unwrap_or(unpacked_path).to_path_buf()
                 }
             } else {
                 tex_path.parent().unwrap_or(unpacked_path).to_path_buf()
             };
 
-            let output_dir = path::resolve_tex_output_dir_compat(
-                None,
-                &scene_root,
-                Some(tex_path),
-                Some(&scene_root),
-            );
-            let _ = path::ensure_dir_compat(&output_dir);
-            output_dir.join(tex_path.file_stem().unwrap_or_default())
+            let output_dir = wallpaper_dir.join("tex_converted");
+            let _ = crate::core::path::ensure_dir_compat(&output_dir);
+            output_dir.join(file_stem)
         }
     }
 }
