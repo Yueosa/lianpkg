@@ -31,7 +31,7 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// 壁纸扫描与复制
-    #[command(visible_alias = "w")]
+    #[command(visible_alias = "w", alias = "scan")]
     Wallpaper(WallpaperArgs),
 
     /// PKG 文件解包
@@ -45,6 +45,9 @@ pub enum Command {
     /// 全自动模式（流水线执行）
     #[command(visible_alias = "a")]
     Auto(AutoArgs),
+
+    /// 查看单个壁纸详情
+    Show(ShowArgs),
 
     /// 配置管理
     #[command(visible_alias = "c")]
@@ -164,9 +167,9 @@ pub struct AutoArgs {
     #[arg(long = "no-clean-unpacked")]
     pub no_clean_unpacked: bool,
 
-    /// 增量处理（跳过已处理的壁纸）
-    #[arg(short = 'I', long)]
-    pub incremental: bool,
+    /// 禁用增量处理（重新处理所有壁纸）
+    #[arg(long)]
+    pub no_incremental: bool,
 
     /// 只处理指定壁纸 ID（逗号分隔）
     #[arg(short = 'i', long, value_name = "IDS", value_delimiter = ',')]
@@ -245,4 +248,19 @@ pub struct StatusArgs {
     /// 跳过确认（与 --clear 配合）
     #[arg(long, short = 'y')]
     pub yes: bool,
+}
+
+// ============================================================================
+// Show 模式参数
+// ============================================================================
+
+#[derive(Args, Debug)]
+pub struct ShowArgs {
+    /// 壁纸 ID
+    #[arg(value_name = "ID")]
+    pub id: String,
+
+    /// 详细模式（显示完整元数据 + PKG 内容）
+    #[arg(short = 'v', long)]
+    pub verbose: bool,
 }

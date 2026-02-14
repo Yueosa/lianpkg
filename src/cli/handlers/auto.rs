@@ -1,24 +1,16 @@
 //! Auto 模式处理器（全自动流水线）
 
 use super::super::args::AutoArgs;
-use super::super::output as out;
+use super::super::{logger, output as out};
 use lianpkg::api::native::{auto, context};
 use std::path::PathBuf;
 
 /// 执行 auto 命令
 pub fn run(args: &AutoArgs, config_path: Option<PathBuf>) -> Result<(), String> {
-    // 加载配置
-    out::debug_api_enter(
-        "native",
-        "init",
-        &format!("config_path={:?}", config_path),
-    );
-    let config_dir = config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf());
-    let mut ctx = context::init(config_dir).map_err(|e| e.to_string())?;
-    out::debug_api_return(&format!(
-        "config_path={}",
-        ctx.config_path.display()
-    ));
+    let mut ctx = super::init_context(config_path)?;
+
+    // 设置全局 quiet 模式
+    logger::set_quiet(args.quiet);
 
     // 应用 CLI 覆盖参数到配置
     apply_overrides(&mut ctx.config, args);
@@ -119,8 +111,8 @@ fn apply_overrides(config: &mut context::RuntimeConfig, args: &AutoArgs) {
     if args.no_clean_unpacked {
         config.clean_unpacked = false;
     }
-    if args.incremental {
-        config.pipeline.incremental = true;
+    if args.no_incremental {
+        config.pipeline.incremental = false;
     }
 }
 

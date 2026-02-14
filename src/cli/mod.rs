@@ -28,6 +28,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         Some(Command::Pkg(ref args)) => handlers::pkg::run(args, config_path),
         Some(Command::Tex(ref args)) => handlers::tex::run(args, config_path),
         Some(Command::Auto(ref args)) => handlers::auto::run(args, config_path),
+        Some(Command::Show(ref args)) => handlers::show::run(args, config_path),
         Some(Command::Config(ref args)) => handlers::config::run(args, config_path),
         Some(Command::Status(ref args)) => handlers::status::run(args, config_path),
         None => {

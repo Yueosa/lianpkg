@@ -101,15 +101,6 @@ fn truncate_str(s: &str, max_width: usize) -> String {
 }
 
 /// 按显示宽度填充字符串（右侧补空格）
-#[allow(dead_code)]
-fn pad_str(s: &str, width: usize) -> String {
-    let current_width = display_width(s);
-    if current_width >= width {
-        s.to_string()
-    } else {
-        format!("{}{}", s, " ".repeat(width - current_width))
-    }
-}
 
 // ============================================================================
 // 颜色与样式
@@ -230,36 +221,8 @@ pub fn error(text: &str) {
     );
 }
 
-/// 输出调试信息（仅在 debug 模式下）
-#[allow(dead_code)]
-pub fn debug(text: &str) {
-    if logger::is_debug() {
-        println!(
-            "  {}  {}",
-            colorize("⋯", color::DIM),
-            colorize(text, color::DIM)
-        );
-    }
-}
-
-/// 输出详细调试信息（带时间戳，仅 debug 模式）
-pub fn debug_verbose(label: &str, text: &str) {
-    if logger::is_debug() {
-        use chrono::Local;
-        let time = Local::now().format("%H:%M:%S%.3f");
-        println!(
-            "  {}  [{}] {}: {}",
-            colorize("⋯", color::DIM),
-            time,
-            colorize(label, color::CYAN),
-            text
-        );
-    }
-}
-
 /// API 调用追踪 - 进入 (仅 debug 模式)
 /// 格式: [17:23:45.123] API → module::function(args)
-#[allow(dead_code)]
 pub fn debug_api_enter(module: &str, function: &str, args: &str) {
     if logger::is_debug() {
         use chrono::Local;
@@ -277,7 +240,6 @@ pub fn debug_api_enter(module: &str, function: &str, args: &str) {
 
 /// API 调用追踪 - 返回 (仅 debug 模式)
 /// 格式: [17:23:45.456] API ← result_summary
-#[allow(dead_code)]
 pub fn debug_api_return(result: &str) {
     if logger::is_debug() {
         use chrono::Local;
@@ -292,7 +254,6 @@ pub fn debug_api_return(result: &str) {
 }
 
 /// API 调用追踪 - 错误 (仅 debug 模式)
-#[allow(dead_code)]
 pub fn debug_api_error(error: &str) {
     if logger::is_debug() {
         use chrono::Local;
@@ -306,26 +267,9 @@ pub fn debug_api_error(error: &str) {
     }
 }
 
-/// 检查是否为 debug 模式
-#[allow(dead_code)]
-pub fn is_debug() -> bool {
-    logger::is_debug()
-}
-
 // ============================================================================
 // 路径显示
 // ============================================================================
-
-/// 格式化路径显示（截断过长路径）
-#[allow(dead_code)]
-pub fn format_path(path: &Path, max_len: usize) -> String {
-    let s = path.display().to_string();
-    if s.len() <= max_len {
-        s
-    } else {
-        format!("...{}", &s[s.len() - max_len + 3..])
-    }
-}
 
 /// 输出路径信息 (quiet 模式下不输出)
 pub fn path_info(label: &str, path: &Path) {
@@ -553,19 +497,6 @@ pub fn stat(label: &str, value: impl std::fmt::Display) {
     );
 }
 
-/// 输出带图标的统计项 (quiet 模式下不输出)
-pub fn stat_icon(icon: &str, label: &str, value: impl std::fmt::Display) {
-    if is_quiet() {
-        return;
-    }
-    println!(
-        "  {}  {:18} {}",
-        colorize(icon, color::CYAN),
-        colorize(&format!("{}:", label), color::DIM),
-        colorize(&value.to_string(), color::BOLD)
-    );
-}
-
 /// 输出布尔选项 (quiet 模式下不输出)
 pub fn option_bool(label: &str, enabled: bool) {
     if is_quiet() {
@@ -599,19 +530,6 @@ pub fn step(num: usize, text: &str) {
     );
 }
 
-/// 输出带图标的子标题 (quiet 模式下不输出)
-pub fn subtitle_icon(icon: &str, text: &str) {
-    if is_quiet() {
-        return;
-    }
-    println!();
-    println!(
-        "{}  {}",
-        colorize(icon, color::BLUE),
-        colorize(text, color::BOLD)
-    );
-}
-
 /// 输出带单位的大小
 pub fn format_size(bytes: u64) -> String {
     const KB: u64 = 1024;
@@ -633,27 +551,12 @@ pub fn format_size(bytes: u64) -> String {
 // Quiet 模式专用输出
 // ============================================================================
 
-/// Quiet 模式下的简洁摘要输出 (始终输出，专为 -q 设计)
-/// 格式: LianPkg v0.4.3 | 36 wallpapers | ~2.5 GB estimated
-#[allow(dead_code)]
-pub fn quiet_summary(version: &str, wallpaper_count: usize, estimated_size: u64) {
-    println!(
-        "LianPkg {} | {} wallpapers | ~{} estimated",
-        version,
-        wallpaper_count,
-        format_size(estimated_size)
-    );
-}
-
-/// Quiet 模式下的路径输出 (始终输出)
-#[allow(dead_code)]
-pub fn quiet_path(label: &str, path: &Path) {
-    println!("{}: {}", label, path.display());
-}
+// ============================================================================
+// Quiet 模式专用输出
+// ============================================================================
 
 /// Quiet 模式下的结果输出 (始终输出)
 /// 格式: Done in 45.2s (21 PKG → 156 images)
-#[allow(dead_code)]
 pub fn quiet_result(duration_secs: f64, pkg_count: usize, image_count: usize) {
     println!(
         "Done in {:.1}s ({} PKG → {} images)",
@@ -722,14 +625,4 @@ pub fn tex_badge(is_tex: bool) -> String {
     }
 }
 
-/// 类型标记
-#[allow(dead_code)]
-pub fn type_badge(wallpaper_type: &str) -> String {
-    match wallpaper_type.to_lowercase().as_str() {
-        "scene" => colorize("scene", color::GREEN),
-        "video" => colorize("video", color::BLUE),
-        "web" => colorize("web", color::YELLOW),
-        "preset" => colorize("preset", color::MAGENTA),
-        _ => wallpaper_type.to_string(),
-    }
-}
+

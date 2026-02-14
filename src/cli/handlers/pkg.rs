@@ -2,25 +2,14 @@
 
 use super::super::args::PkgArgs;
 use super::super::output as out;
-use lianpkg::api::native::{context, pkg};
+use lianpkg::api::native::pkg;
 use lianpkg::core::path;
 use std::fs;
 use std::path::PathBuf;
 
 /// 执行 pkg 命令
 pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
-    // 加载配置
-    out::debug_api_enter(
-        "native",
-        "init",
-        &format!("config_path={:?}", config_path),
-    );
-    let config_dir = config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf());
-    let ctx = context::init(config_dir).map_err(|e| e.to_string())?;
-    out::debug_api_return(&format!(
-        "config_path={}",
-        ctx.config_path.display()
-    ));
+    let ctx = super::init_context(config_path)?;
 
     // 确定路径
     let input_path = args
@@ -89,50 +78,7 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
             &format!("input={}", input_path.display()),
         );
 
-        let mut pkg_sources = Vec::new();
-        if let Ok(entries) = fs::read_dir(&input_path) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file() {
-                    if let Some(ext) = path.extension() {
-                        if ext.to_string_lossy().to_lowercase() == "pkg" {
-                            let id = path
-                                .file_stem()
-                                .map(|s| s.to_string_lossy().to_string())
-                                .unwrap_or_default();
-                            pkg_sources.push(pkg::PkgSource {
-                                wallpaper_id: id,
-                                pkg_paths: vec![path],
-                            });
-                        }
-                    }
-                } else if path.is_dir() {
-                    let dir_name = path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default();
-                    let mut pkgs = Vec::new();
-                    if let Ok(sub_entries) = fs::read_dir(&path) {
-                        for sub_entry in sub_entries.flatten() {
-                            let sub_path = sub_entry.path();
-                            if sub_path.is_file() {
-                                if let Some(ext) = sub_path.extension() {
-                                    if ext.to_string_lossy().to_lowercase() == "pkg" {
-                                        pkgs.push(sub_path);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if !pkgs.is_empty() {
-                        pkg_sources.push(pkg::PkgSource {
-                            wallpaper_id: dir_name,
-                            pkg_paths: pkgs,
-                        });
-                    }
-                }
-            }
-        }
+        let pkg_sources = collect_pkg_sources(&input_path)?;
 
         let result = pkg::unpack_all(&pkg_sources, &output_path)
             .map_err(|e| e.to_string())?;
@@ -221,7 +167,11 @@ fn preview_single_pkg(pkg_path: &std::path::Path, verbose: bool) -> Result<(), S
 
 /// 预览目录中的所有 PKG
 fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
-    let pkg_files = find_pkg_files(dir_path)?;
+    let sources = collect_pkg_sources(dir_path)?;
+    let pkg_files: Vec<PathBuf> = sources
+        .into_iter()
+        .flat_map(|s| s.pkg_paths)
+        .collect();
 
     if pkg_files.is_empty() {
         out::warning("No PKG files found in directory");
@@ -269,10 +219,9 @@ fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// 查找目录中的 PKG 文件
-fn find_pkg_files(dir: &PathBuf) -> Result<Vec<PathBuf>, String> {
-    let mut pkg_files = Vec::new();
-
+/// 收集目录中的 PKG 源（支持扁平 .pkg 文件和子目录）
+fn collect_pkg_sources(dir: &PathBuf) -> Result<Vec<pkg::PkgSource>, String> {
+    let mut sources = Vec::new();
     let entries = fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     for entry in entries.flatten() {
@@ -280,11 +229,42 @@ fn find_pkg_files(dir: &PathBuf) -> Result<Vec<PathBuf>, String> {
         if path.is_file() {
             if let Some(ext) = path.extension() {
                 if ext.to_string_lossy().to_lowercase() == "pkg" {
-                    pkg_files.push(path);
+                    let id = path
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    sources.push(pkg::PkgSource {
+                        wallpaper_id: id,
+                        pkg_paths: vec![path],
+                    });
                 }
+            }
+        } else if path.is_dir() {
+            let dir_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let mut pkgs = Vec::new();
+            if let Ok(sub_entries) = fs::read_dir(&path) {
+                for sub_entry in sub_entries.flatten() {
+                    let sub_path = sub_entry.path();
+                    if sub_path.is_file() {
+                        if let Some(ext) = sub_path.extension() {
+                            if ext.to_string_lossy().to_lowercase() == "pkg" {
+                                pkgs.push(sub_path);
+                            }
+                        }
+                    }
+                }
+            }
+            if !pkgs.is_empty() {
+                sources.push(pkg::PkgSource {
+                    wallpaper_id: dir_name,
+                    pkg_paths: pkgs,
+                });
             }
         }
     }
 
-    Ok(pkg_files)
+    Ok(sources)
 }

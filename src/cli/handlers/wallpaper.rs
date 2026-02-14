@@ -1,25 +1,14 @@
-//! Wallpaper 模式处理器
+//! Wallpaper 模式处理器（扫描 + 复制）
 
 use super::super::args::WallpaperArgs;
 use super::super::output as out;
-use lianpkg::api::native::{context, scan};
+use lianpkg::api::native::scan;
 use lianpkg::core::path;
 use std::path::PathBuf;
 
 /// 执行 wallpaper 命令
 pub fn run(args: &WallpaperArgs, config_path: Option<PathBuf>) -> Result<(), String> {
-    // 加载配置
-    out::debug_api_enter(
-        "native",
-        "init",
-        &format!("config_path={:?}", config_path),
-    );
-    let config_dir = config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf());
-    let ctx = context::init(config_dir).map_err(|e| e.to_string())?;
-    out::debug_api_return(&format!(
-        "config_path={}",
-        ctx.config_path.display()
-    ));
+    let ctx = super::init_context(config_path)?;
 
     // 确定路径
     let workshop_path = args

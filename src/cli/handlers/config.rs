@@ -8,18 +8,7 @@ use std::path::PathBuf;
 
 /// 执行 config 命令
 pub fn run(args: &ConfigArgs, config_path: Option<PathBuf>) -> Result<(), String> {
-    // 加载配置
-    out::debug_api_enter(
-        "native",
-        "init",
-        &format!("config_path={:?}", config_path),
-    );
-    let config_dir = config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf());
-    let ctx = context::init(config_dir).map_err(|e| e.to_string())?;
-    out::debug_api_return(&format!(
-        "config_path={}",
-        ctx.config_path.display()
-    ));
+    let ctx = super::init_context(config_path)?;
 
     match &args.command {
         None | Some(ConfigCommand::Show) => show_config(&ctx),
@@ -34,12 +23,6 @@ pub fn run(args: &ConfigArgs, config_path: Option<PathBuf>) -> Result<(), String
 /// 显示完整配置
 fn show_config(ctx: &context::AppContext) -> Result<(), String> {
     out::title("Configuration");
-
-    // 读取原始 TOML 内容
-    let raw_content = cfg::read_config_toml(cfg::ReadConfigInput {
-        path: ctx.config_path.clone(),
-    })
-    .map_err(|e| e.to_string())?;
 
     out::path_info("Config File", &ctx.config_path);
     println!();
@@ -75,7 +58,9 @@ fn show_config(ctx: &context::AppContext) -> Result<(), String> {
 
     println!();
     out::subtitle("Raw TOML");
-    println!("{}", raw_content.content);
+    let raw = std::fs::read_to_string(&ctx.config_path)
+        .map_err(|e| format!("Failed to read config file: {}", e))?;
+    println!("{}", raw);
 
     Ok(())
 }
