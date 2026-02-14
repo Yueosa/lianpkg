@@ -11,6 +11,9 @@ use std::path::{Path, PathBuf};
 /// 筛选待处理的壁纸
 ///
 /// 根据增量模式和指定 ID 列表过滤壁纸。
+///
+/// 增量模式下，只跳过已成功处理（Pkg/Raw）的壁纸，
+/// 之前被 Skipped 的壁纸会重新评估（例如用户后来开启了 raw_output）。
 pub fn filter_wallpapers(
     wallpapers: &[WallpaperInfo],
     state: &cfg::StateData,
@@ -25,7 +28,10 @@ pub fn filter_wallpapers(
                 None => true,
             };
             let not_processed = if incremental {
-                !state.processed.contains_key(&w.wallpaper_id)
+                match state.processed.get(&w.wallpaper_id) {
+                    Some(info) => info.process_type == cfg::ProcessType::Skipped,
+                    None => true,
+                }
             } else {
                 true
             };
