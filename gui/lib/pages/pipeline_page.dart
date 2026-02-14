@@ -154,7 +154,7 @@ class PipelinePage extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Auto Pipeline', style: theme.textTheme.headlineMedium),
+          Text('自动流水线', style: theme.textTheme.headlineMedium),
           const SizedBox(height: 20),
 
           // 选项
@@ -164,34 +164,34 @@ class PipelinePage extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Options', style: theme.textTheme.titleMedium),
+                  Text('选项', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 16,
                     children: [
                       _OptionSwitch(
-                        label: 'Copy Raw',
+                        label: '复制 Raw',
                         value: !uiState.noRaw,
                         onChanged: uiState.runState != _RunState.running
                             ? (v) => notifier.toggleNoRaw(!v)
                             : null,
                       ),
                       _OptionSwitch(
-                        label: 'Convert TEX',
+                        label: '转换 TEX',
                         value: !uiState.noTex,
                         onChanged: uiState.runState != _RunState.running
                             ? (v) => notifier.toggleNoTex(!v)
                             : null,
                       ),
                       _OptionSwitch(
-                        label: 'Clean Unpacked',
+                        label: '清理解包',
                         value: !uiState.noCleanUnpacked,
                         onChanged: uiState.runState != _RunState.running
                             ? (v) => notifier.toggleNoCleanUnpacked(!v)
                             : null,
                       ),
                       _OptionSwitch(
-                        label: 'Incremental',
+                        label: '增量模式',
                         value: !uiState.noIncremental,
                         onChanged: uiState.runState != _RunState.running
                             ? (v) => notifier.toggleNoIncremental(!v)
@@ -212,7 +212,7 @@ class PipelinePage extends ConsumerWidget {
                 FilledButton.icon(
                   onPressed: () => notifier.start(),
                   icon: const Icon(Icons.play_arrow),
-                  label: const Text('Start Pipeline'),
+                  label: const Text('开始处理'),
                 )
               else
                 FilledButton.icon(
@@ -222,7 +222,7 @@ class PipelinePage extends ConsumerWidget {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                  label: const Text('Running...'),
+                  label: const Text('处理中...'),
                 ),
               if (uiState.runState == _RunState.done ||
                   uiState.runState == _RunState.error) ...[
@@ -230,7 +230,7 @@ class PipelinePage extends ConsumerWidget {
                 OutlinedButton.icon(
                   onPressed: () => notifier.reset(),
                   icon: const Icon(Icons.restart_alt),
-                  label: const Text('Reset'),
+                  label: const Text('重置'),
                 ),
               ],
             ],
@@ -257,9 +257,7 @@ class PipelinePage extends ConsumerWidget {
                   children: [
                     Icon(Icons.error, color: theme.colorScheme.error),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(uiState.errorMessage ?? 'Unknown error'),
-                    ),
+                    Expanded(child: Text(uiState.errorMessage ?? '未知错误')),
                   ],
                 ),
               ),
@@ -310,7 +308,7 @@ class _ProgressPanel extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text('Stage: ', style: theme.textTheme.titleSmall),
+                Text('阶段: ', style: theme.textTheme.titleSmall),
                 Text(progress.stage.isNotEmpty ? progress.stage : '...'),
                 const Spacer(),
                 Text('${progress.percent}%', style: theme.textTheme.titleSmall),

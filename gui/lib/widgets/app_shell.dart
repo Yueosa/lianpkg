@@ -18,27 +18,27 @@ class AppShell extends ConsumerWidget {
     NavigationRailDestination(
       icon: Icon(Icons.dashboard_outlined),
       selectedIcon: Icon(Icons.dashboard),
-      label: Text('Dashboard'),
+      label: Text('总览'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.photo_library_outlined),
       selectedIcon: Icon(Icons.photo_library),
-      label: Text('Browser'),
+      label: Text('浏览'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.rocket_launch_outlined),
       selectedIcon: Icon(Icons.rocket_launch),
-      label: Text('Pipeline'),
+      label: Text('流水线'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.list_alt_outlined),
       selectedIcon: Icon(Icons.list_alt),
-      label: Text('State'),
+      label: Text('状态'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.settings_outlined),
       selectedIcon: Icon(Icons.settings),
-      label: Text('Settings'),
+      label: Text('设置'),
     ),
   ];
 

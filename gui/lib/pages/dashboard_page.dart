@@ -44,7 +44,7 @@ class DashboardPage extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Overview', style: theme.textTheme.headlineMedium),
+              Text('总览', style: theme.textTheme.headlineMedium),
               const SizedBox(height: 16),
 
               // 统计卡片
@@ -73,7 +73,7 @@ class DashboardPage extends ConsumerWidget {
                   const SizedBox(width: 12),
                   _StatCard(
                     icon: Icons.skip_next,
-                    label: 'Skipped',
+                    label: '已跳过',
                     value: '${status.skippedCount}',
                     color: theme.colorScheme.outline,
                   ),
@@ -86,7 +86,7 @@ class DashboardPage extends ConsumerWidget {
               const SizedBox(height: 24),
 
               // 快捷操作
-              Text('Quick Actions', style: theme.textTheme.titleLarge),
+              Text('快捷操作', style: theme.textTheme.titleLarge),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 12,
@@ -118,7 +118,7 @@ class DashboardPage extends ConsumerWidget {
               const SizedBox(height: 24),
 
               // 最近处理记录
-              Text('Recent Records', style: theme.textTheme.titleLarge),
+              Text('最近记录', style: theme.textTheme.titleLarge),
               const SizedBox(height: 8),
               stateAsync.when(
                 loading: () => const Padding(
@@ -215,7 +215,7 @@ class _DiskEstimateCard extends StatelessWidget {
               children: [
                 const Icon(Icons.storage, size: 20),
                 const SizedBox(width: 8),
-                Text('Disk Estimate', style: theme.textTheme.titleMedium),
+                Text('磁盘估算', style: theme.textTheme.titleMedium),
                 const Spacer(),
                 if (estimate.spaceSufficient)
                   Chip(

@@ -92,7 +92,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           children: [
             Row(
               children: [
-                Text('Settings', style: theme.textTheme.headlineMedium),
+                Text('设置', style: theme.textTheme.headlineMedium),
                 const Spacer(),
                 if (_saving)
                   const SizedBox(
@@ -111,41 +111,41 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const SizedBox(height: 24),
 
             // 路径配置
-            Text('Paths', style: theme.textTheme.titleLarge),
+            Text('路径', style: theme.textTheme.titleLarge),
             const SizedBox(height: 12),
             _PathField(
-              label: 'Workshop Path',
+              label: 'Workshop 路径',
               value: config.workshopPath,
               onSave: (v) => _setConfig('workshop_path', v),
             ),
             _PathField(
-              label: 'Raw Output Path',
+              label: 'Raw 输出路径',
               value: config.rawOutputPath,
               onSave: (v) => _setConfig('raw_output_path', v),
             ),
             _PathField(
-              label: 'Unpacked Output Path',
+              label: '解包输出路径',
               value: config.unpackedOutputPath,
               onSave: (v) => _setConfig('unpacked_output_path', v),
             ),
             _PathField(
-              label: 'Converted Output Path',
+              label: '转换输出路径',
               value: config.convertedOutputPath,
               onSave: (v) => _setConfig('converted_output_path', v),
             ),
             const SizedBox(height: 24),
 
             // 开关配置
-            Text('Options', style: theme.textTheme.titleLarge),
+            Text('选项', style: theme.textTheme.titleLarge),
             const SizedBox(height: 12),
             SwitchListTile(
-              title: const Text('Enable Raw Output'),
+              title: const Text('启用 Raw 输出'),
               subtitle: const Text('直接复制非 PKG 壁纸到输出目录'),
               value: config.enableRawOutput,
               onChanged: (v) => _setConfig('enable_raw_output', v.toString()),
             ),
             SwitchListTile(
-              title: const Text('Clean Unpacked'),
+              title: const Text('清理解包中间文件'),
               subtitle: const Text('转换 TEX 后删除解包的中间文件'),
               value: config.cleanUnpacked,
               onChanged: (v) => _setConfig('clean_unpacked', v.toString()),
@@ -153,25 +153,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const Divider(),
 
             // 流水线配置
-            Text('Pipeline', style: theme.textTheme.titleLarge),
+            Text('流水线', style: theme.textTheme.titleLarge),
             const SizedBox(height: 12),
             SwitchListTile(
-              title: const Text('Incremental'),
-              subtitle: const Text('增量处理，跳过已处理的壁纸'),
+              title: const Text('增量处理'),
+              subtitle: const Text('跳过已处理的壁纸'),
               value: config.pipeline.incremental,
               onChanged: (v) =>
                   _setConfig('pipeline.incremental', v.toString()),
             ),
             SwitchListTile(
-              title: const Text('Auto Unpack PKG'),
-              subtitle: const Text('自动解包 PKG 文件'),
+              title: const Text('自动解包 PKG'),
+              subtitle: const Text('自动解包壁纸中的 PKG 文件'),
               value: config.pipeline.autoUnpackPkg,
               onChanged: (v) =>
                   _setConfig('pipeline.auto_unpack_pkg', v.toString()),
             ),
             SwitchListTile(
-              title: const Text('Auto Convert TEX'),
-              subtitle: const Text('自动将 TEX 转换为 PNG'),
+              title: const Text('自动转换 TEX'),
+              subtitle: const Text('自动将 TEX 纹理转换为 PNG 图片'),
               value: config.pipeline.autoConvertTex,
               onChanged: (v) =>
                   _setConfig('pipeline.auto_convert_tex', v.toString()),

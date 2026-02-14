@@ -27,7 +27,7 @@ class StatePage extends ConsumerWidget {
           // 标题栏
           Row(
             children: [
-              Text('Processing State', style: theme.textTheme.headlineMedium),
+              Text('处理状态', style: theme.textTheme.headlineMedium),
               const Spacer(),
               OutlinedButton.icon(
                 onPressed: () => ref.invalidate(stateProvider),
