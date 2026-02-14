@@ -222,6 +222,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         output: config.unpackedOutputPath,
       );
       if (mounted) {
+        ref.invalidate(statusProvider);
         setState(() {
           _unpackResult =
               '解包完成: ${output.totalFiles} 个文件 '
@@ -249,6 +250,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       final config = await ref.read(configProvider.future);
       final output = await service.convertTex(input: config.unpackedOutputPath);
       if (mounted) {
+        ref.invalidate(statusProvider);
         setState(() {
           _convertResult =
               '转换完成: ${output.imageCount} 张图片, '
