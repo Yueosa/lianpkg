@@ -9,7 +9,6 @@ build.rs
 .directory
 
 # 软件图标
-avatar-modified.ico
 resources.rc
 resources.o
 libresources.a
