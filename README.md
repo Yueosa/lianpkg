@@ -2,8 +2,6 @@
 
 LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它可以提取壁纸文件、解包 `.pkg` 文件以及将 `.tex` 纹理转换为常见的图像格式，支持 Linux 与 Windows。
 
-# 正在超级大重构!!! 请使用稳定版本!!!
-
 ---
 
 ## 使用前须知 ⚠️
@@ -64,14 +62,14 @@ cargo build --release
 ## 快速开始 🚀
 
 ```bash
-# 一键处理所有壁纸（推荐）
+# 一键处理所有壁纸（推荐，默认增量处理）
 lianpkg auto
 
 # 先预览将执行的操作
 lianpkg auto --dry-run
 
-# 增量处理（跳过之前已处理的壁纸）
-lianpkg auto --incremental
+# 强制全量处理（忽略之前的处理记录）
+lianpkg auto --no-incremental
 ```
 
 ---
@@ -95,14 +93,15 @@ lianpkg [OPTIONS] <COMMAND>
 
 ### 命令列表
 
-| 命令        | 别名 | 说明           |
-| ----------- | ---- | -------------- |
-| `wallpaper` | `w`  | 壁纸扫描与复制 |
-| `pkg`       | `p`  | PKG 文件解包   |
-| `tex`       | `t`  | TEX 文件转换   |
-| `auto`      | `a`  | 全自动流水线   |
-| `config`    | `c`  | 配置管理       |
-| `status`    | `s`  | 状态查看       |
+| 命令        | 别名       | 说明               |
+| ----------- | ---------- | ------------------ |
+| `wallpaper` | `w`, `scan`| 壁纸扫描与复制     |
+| `pkg`       | `p`        | PKG 文件解包       |
+| `tex`       | `t`        | TEX 文件转换       |
+| `auto`      | `a`        | 全自动流水线       |
+| `show`      |            | 查看单个壁纸详情   |
+| `config`    | `c`        | 配置管理           |
+| `status`    | `s`        | 状态查看           |
 
 ---
 
@@ -121,7 +120,6 @@ lianpkg wallpaper [OPTIONS] [PATH]
 | 短格式 | 长格式              | 说明                             |
 | ------ | ------------------- | -------------------------------- |
 | `-r`   | `--raw-out <PATH>`  | 原始壁纸输出路径                 |
-| `-t`   | `--pkg-temp <PATH>` | PKG 临时输出路径                 |
 |        | `--no-raw`          | 跳过原始壁纸复制（只提取 PKG）   |
 | `-i`   | `--ids <IDS>`       | 只处理指定壁纸 ID（逗号分隔）    |
 | `-p`   | `--preview`         | 预览模式（列出壁纸，不执行复制） |
@@ -138,7 +136,7 @@ lianpkg wallpaper --ids 123456789,987654321
 lianpkg w -i 123456789,987654321
 
 # 自定义输出路径
-lianpkg wallpaper -r ~/wallpapers/raw -t ~/wallpapers/pkg
+lianpkg wallpaper -r ~/wallpapers/raw
 ```
 
 ---
@@ -167,7 +165,7 @@ lianpkg pkg [OPTIONS] [PATH]
 lianpkg pkg ./scene.pkg -o ./output
 
 # 预览 PKG 内容
-lianpkg pkg ./scene.pkg -p -V
+lianpkg pkg ./scene.pkg -p -v
 
 # 批量解包目录
 lianpkg p ~/wallpapers/pkg_temp
@@ -199,7 +197,7 @@ lianpkg tex [OPTIONS] [PATH]
 lianpkg tex ./texture.tex
 
 # 预览 TEX 格式信息
-lianpkg t ./texture.tex -p -V
+lianpkg t ./texture.tex -p -v
 
 # 批量转换目录
 lianpkg tex ~/wallpapers/unpacked -o ~/wallpapers/images
@@ -221,7 +219,6 @@ lianpkg auto [OPTIONS]
 | `-q`   | `--quiet`               | 静默模式（只输出结果） |
 | `-s`   | `--search <PATH>`       | 壁纸源目录             |
 | `-r`   | `--raw-out <PATH>`      | 原始壁纸输出目录       |
-| `-t`   | `--pkg-temp <PATH>`     | PKG 临时目录           |
 | `-u`   | `--unpacked-out <PATH>` | 解包输出目录           |
 | `-o`   | `--tex-out <PATH>`      | TEX 转换输出目录       |
 
@@ -230,9 +227,8 @@ lianpkg auto [OPTIONS]
 | ------ | --------------------- | ----------------------------- |
 |        | `--no-raw`            | 跳过原始壁纸提取              |
 |        | `--no-tex`            | 跳过 TEX 转换                 |
-|        | `--no-clean-temp`     | 保留 PKG 临时目录             |
 |        | `--no-clean-unpacked` | 保留解包中间产物              |
-| `-I`   | `--incremental`       | 增量处理（跳过已处理的壁纸）  |
+|        | `--no-incremental`    | 禁用增量处理（重新处理所有壁纸）|
 | `-i`   | `--ids <IDS>`         | 只处理指定壁纸 ID（逗号分隔） |
 | `-n`   | `--dry-run`           | 仅显示计划，不执行            |
 
@@ -246,17 +242,44 @@ lianpkg a
 # 预览执行计划
 lianpkg auto -n
 
-# 增量处理新壁纸
-lianpkg auto -I
-
 # 只处理特定壁纸
 lianpkg a -i 123456789
 
+# 全量重新处理
+lianpkg auto --no-incremental
+
 # 保留中间文件用于调试
-lianpkg auto --no-clean-temp --no-clean-unpacked
+lianpkg auto --no-clean-unpacked
 
 # 自定义输出路径
 lianpkg auto -s ~/workshop -o ~/output/converted
+```
+
+---
+
+### `show` — 查看壁纸详情 🔍
+
+按 ID 快速查看单个壁纸的信息。
+
+```bash
+lianpkg show <ID> [OPTIONS]
+```
+
+**参数**：
+- `<ID>` — 壁纸 ID（必填）
+
+**选项**：
+| 短格式 | 长格式      | 说明                              |
+| ------ | ----------- | --------------------------------- |
+| `-v`   | `--verbose` | 详细模式（显示完整元数据 + PKG 内容） |
+
+**示例**：
+```bash
+# 查看壁纸基本信息
+lianpkg show 123456789
+
+# 查看详细信息（含 PKG 文件内容）
+lianpkg show 123456789 -v
 ```
 
 ---
