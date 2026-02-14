@@ -1,6 +1,15 @@
 # LianPkg ✨
 
-LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它可以提取壁纸文件、解包 `.pkg` 文件以及将 `.tex` 纹理转换为常见的图像格式，支持 Linux 与 Windows。
+LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它可以提取壁纸文件、解包 `.pkg` 文件以及将 `.tex` 纹理转换为常见的图像/视频格式，支持 Linux 与 Windows。
+
+### 特性
+
+- **全自动流水线** — 一条命令完成 扫描 → 解包 → 转换
+- **多线程 TEX 转换** — 基于 rayon 并行处理，充分利用多核 CPU
+- **增量处理** — 自动跳过已处理的壁纸，只处理新增内容
+- **多格式支持** — 支持 TEX v1-v4、图片纹理（PNG）、视频纹理（MP4）
+- **自动探测** — 自动扫描所有 Steam Library 定位壁纸目录（支持多磁盘）
+- **跨平台** — Linux / Windows 双平台支持
 
 ---
 
@@ -13,7 +22,7 @@ LianPkg 的工作对象是 Steam Workshop 中的 Wallpaper Engine 壁纸资源�
 - **Linux**: `~/.local/share/Steam/steamapps/workshop/content/431960`
 - **Windows**: 自动扫描 `libraryfolders.vdf` 定位
 
-程序会自动扫描 Steam 库配置文件，即使你的 Wallpaper Engine 安装在非默认的 Steam 库，程序也能自动定位到正确的壁纸路径。
+程序会自动扫描 Steam 库配置文件（包括 Flatpak / Snap 安装），即使你的 Wallpaper Engine 安装在非默认的 Steam 库，程序也能自动定位到正确的壁纸路径。
 
 **前提条件**：
 - 已安装并运行过 Steam 官方的 Wallpaper Engine
@@ -25,7 +34,7 @@ LianPkg 的工作对象是 Steam Workshop 中的 Wallpaper Engine 壁纸资源�
 
 ### 下载预编译版本
 
-在 [Releases](https://github.com/YourRepo/lianpkg/releases) 页面下载对应平台的二进制文件。
+在 [Releases](https://github.com/Yueosa/lianpkg/releases) 页面下载对应平台的二进制文件。
 
 ### Arch Linux (AUR)
 
@@ -38,7 +47,7 @@ paru -S lianpkg-bin
 ### 从源码编译
 
 ```bash
-git clone https://github.com/YourRepo/lianpkg.git
+git clone https://github.com/Yueosa/lianpkg.git
 cd lianpkg
 cargo build --release
 # 二进制文件位于 target/release/lianpkg
@@ -50,10 +59,18 @@ cargo build --release
 
 首次运行时，LianPkg 会生成默认配置文件：
 
-| 平台    | 配置路径                        |
-| ------- | ------------------------------- |
-| Linux   | `~/.config/lianpkg/config.toml` |
-| Windows | `exe路径\config\config.toml`    |
+| 平台    | 配置路径                                |
+| ------- | --------------------------------------- |
+| Linux   | `~/.config/lianpkg/config.toml`         |
+| Windows | `%APPDATA%\lianpkg\config.toml`         |
+
+默认输出路径（Linux）：
+
+| 用途           | 路径                                                     |
+| -------------- | -------------------------------------------------------- |
+| 原始壁纸复制   | `~/.local/share/lianpkg/Wallpapers_Raw`                  |
+| PKG 解包中间产物 | `~/.local/share/lianpkg/Pkg_Unpacked/unpacked`          |
+| TEX 转换最终产物 | `~/.local/share/lianpkg/Pkg_Unpacked/tex_converted`     |
 
 配置优先级：**命令行参数** > `config.toml` > **默认值**
 
@@ -187,7 +204,7 @@ lianpkg tex [OPTIONS] [PATH]
 **选项**：
 | 短格式 | 长格式            | 说明                                                      |
 | ------ | ----------------- | --------------------------------------------------------- |
-| `-o`   | `--output <PATH>` | 转换输出路径（默认在源文件同级生成 `tex_converted` 目录） |
+| `-o`   | `--output <PATH>` | 转换输出路径（默认从 config.toml 读取） |
 | `-p`   | `--preview`       | 预览模式（显示 TEX 格式信息，不转换）                     |
 | `-v`   | `--verbose`       | 详细预览                                                  |
 
@@ -379,4 +396,4 @@ LianPkg 是完全独立的 Rust 重写版本，未复制任何源代码。
 
 ## License
 
-MIT License
+GPL-3.0 License
