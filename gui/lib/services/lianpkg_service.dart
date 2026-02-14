@@ -20,7 +20,9 @@ class LianpkgService {
 
   /// 初始化 lianpkg 上下文，返回运行时配置
   Future<LianpkgConfig> init({String? configDir}) async {
-    final result = await _ffi.callAsync('init', {?'config_dir': configDir});
+    final result = await _ffi.callAsync('init', {
+      if (configDir != null) 'config_dir': configDir,
+    });
     _checkError(result);
     // init 返回的是 AppContext { config, config_path, state_path }
     final data = result['data'] as Map<String, dynamic>;
@@ -34,7 +36,7 @@ class LianpkgService {
   /// 扫描 Workshop 壁纸
   Future<ScanResult> scan({String? workshopPath}) async {
     final result = await _ffi.callAsync('scan', {
-      if (workshopPath != null) 'workshop_path': workshopPath,
+      ?'workshop_path': workshopPath,
     });
     _checkError(result);
     return ScanResult.fromJson(result['data'] as Map<String, dynamic>);
@@ -53,7 +55,7 @@ class LianpkgService {
     bool noIncremental = false,
   }) async {
     final result = await _ffi.callAsync('auto', {
-      if (wallpaperIds != null) 'wallpaper_ids': wallpaperIds,
+      ?'wallpaper_ids': wallpaperIds,
       'no_raw': noRaw,
       'no_tex': noTex,
       'no_clean_unpacked': noCleanUnpacked,
@@ -105,7 +107,7 @@ class LianpkgService {
   }) async {
     final result = await _ffi.callAsync('tex_convert', {
       'input': input,
-      if (output != null) 'output': output,
+      ?'output': output,
     });
     _checkError(result);
     return ConvertOutput.fromJson(result['data'] as Map<String, dynamic>);
