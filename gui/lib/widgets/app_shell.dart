@@ -61,7 +61,19 @@ class AppShell extends ConsumerWidget {
           NavigationRail(
             selectedIndex: index,
             onDestinationSelected: (i) {
+              final prev = ref.read(navigationIndexProvider);
               ref.read(navigationIndexProvider.notifier).state = i;
+              // 切换到 tab 时刷新该 tab 需要的数据
+              if (i != prev) {
+                if (i == 0) {
+                  ref.invalidate(statusProvider);
+                  ref.invalidate(stateProvider);
+                } else if (i == 1) {
+                  ref.invalidate(scanResultProvider);
+                } else if (i == 2) {
+                  ref.invalidate(configProvider);
+                }
+              }
             },
             labelType: NavigationRailLabelType.all,
             destinations: _destinations,

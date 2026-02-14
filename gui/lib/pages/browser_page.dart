@@ -140,6 +140,15 @@ class _WallpaperCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
+          if (!Directory(wallpaper.folderPath).existsSync()) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('壁纸文件夹不存在，可能已被删除'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+            return;
+          }
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => DetailPage(wallpaper: wallpaper)),
           );
