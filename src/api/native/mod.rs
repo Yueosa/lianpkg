@@ -83,7 +83,7 @@ pub use cfg::{
     load_config,
     load_state,
     save_state,
-    update_statistics,
+    touch_last_run,
     // 结构体
     InitConfigInput,
     InitConfigOutput,

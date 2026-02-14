@@ -162,20 +162,30 @@ pub fn init_config(input: InitConfigInput) -> InitConfigOutput {
     });
 
     // 检查结果
-    let (config_created, state_created) = match (config_result, state_result) {
-        (Ok(c), Ok(s)) => (c.created, s.created),
-        (Ok(c), Err(_)) => (c.created, false),
-        (Err(_), Ok(s)) => (false, s.created),
-        (Err(_), Err(_)) => (false, false),
+    let (config_created, config_err) = match config_result {
+        Ok(c) => (c.created, None),
+        Err(e) => (false, Some(format!("config.toml: {}", e))),
+    };
+    let (state_created, state_err) = match state_result {
+        Ok(s) => (s.created, None),
+        Err(e) => (false, Some(format!("state.json: {}", e))),
     };
 
+    let error = match (config_err, state_err) {
+        (None, None) => None,
+        (Some(a), None) => Some(a),
+        (None, Some(b)) => Some(b),
+        (Some(a), Some(b)) => Some(format!("{}; {}", a, b)),
+    };
+    let success = error.is_none();
+
     InitConfigOutput {
-        success: true,
+        success,
         config_created,
         state_created,
         config_path,
         state_path,
-        error: None,
+        error,
     }
 }
 
@@ -274,53 +284,35 @@ pub fn save_state(input: SaveStateInput) -> SaveStateOutput {
     }
 }
 
-/// 检查壁纸是否已处理
+/// 检查壁纸是否已处理（HashMap O(1) 查找）
 pub fn is_wallpaper_processed(state: &cfg::StateData, wallpaper_id: &str) -> bool {
-    state
-        .processed_wallpapers
-        .iter()
-        .any(|w| w.wallpaper_id == wallpaper_id)
+    state.processed.contains_key(wallpaper_id)
 }
 
-/// 添加已处理壁纸记录
+/// 添加已处理壁纸记录（HashMap upsert，相同 wallpaper_id 会覆盖旧记录）
 pub fn add_processed_wallpaper(
     state: &mut cfg::StateData,
     wallpaper_id: String,
     title: Option<String>,
-    process_type: cfg::WallpaperProcessType,
+    process_type: cfg::ProcessType,
     output_path: Option<String>,
 ) {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    let now = chrono::Utc::now().to_rfc3339();
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    state.processed_wallpapers.push(cfg::ProcessedWallpaper {
+    state.processed.insert(
         wallpaper_id,
-        title,
-        process_type,
-        processed_at: now,
-        output_path,
-    });
+        cfg::ProcessedEntry {
+            title,
+            process_type,
+            processed_at: now,
+            output_path,
+        },
+    );
 }
 
-/// 更新统计信息
-pub fn update_statistics(state: &mut cfg::StateData, wallpapers: u64, pkgs: u64, texs: u64) {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    state.statistics.total_runs += 1;
-    state.statistics.total_wallpapers += wallpapers;
-    state.statistics.total_pkgs += pkgs;
-    state.statistics.total_texs += texs;
-
-    state.last_run = Some(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0),
-    );
+/// 更新 last_run 时间戳（ISO 8601）
+pub fn touch_last_run(state: &mut cfg::StateData) {
+    state.last_run = Some(chrono::Utc::now().to_rfc3339());
 }
 
 // ============================================================================

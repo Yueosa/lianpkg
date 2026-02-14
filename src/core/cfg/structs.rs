@@ -1,6 +1,7 @@
 //! 结构体定义 - 所有接口的入参与返回值结构体
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 // ============================================================================
@@ -78,37 +79,35 @@ pub struct DeleteConfigOutput {
 // ============================================================================
 
 /// State.json 完整结构（用于序列化/反序列化）
+///
+/// `processed` 使用 HashMap<wallpaper_id, ProcessedEntry> 实现 O(1) 查重与去重。
+/// 旧版 Vec 格式的 state.json 将无法解析，但 load_state 会 fallback 到空 StateData（可接受）。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StateData {
-    /// 已处理的壁纸列表
+    /// 已处理壁纸映射: wallpaper_id → ProcessedEntry
     #[serde(default)]
-    pub processed_wallpapers: Vec<ProcessedWallpaper>,
-    /// 上次运行时间（Unix 时间戳）
+    pub processed: HashMap<String, ProcessedEntry>,
+    /// 上次运行时间（ISO 8601 字符串，如 "2025-01-15T08:30:00Z"）
     #[serde(default)]
-    pub last_run: Option<u64>,
-    /// 统计信息
-    #[serde(default)]
-    pub statistics: StateStatistics,
+    pub last_run: Option<String>,
 }
 
 /// 已处理的壁纸记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProcessedWallpaper {
-    /// 壁纸 ID（通常是文件夹名，即 workshop id）
-    pub wallpaper_id: String,
+pub struct ProcessedEntry {
     /// 壁纸标题（从 project.json 读取）
     pub title: Option<String>,
     /// 处理类型
-    pub process_type: WallpaperProcessType,
-    /// 处理时间（Unix 时间戳）
-    pub processed_at: u64,
+    pub process_type: ProcessType,
+    /// 处理时间（ISO 8601 字符串）
+    pub processed_at: String,
     /// 输出路径
     pub output_path: Option<String>,
 }
 
 /// 壁纸处理类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum WallpaperProcessType {
+pub enum ProcessType {
     /// 原始壁纸（直接复制）
     Raw,
     /// Pkg 壁纸（已解包）
@@ -117,23 +116,6 @@ pub enum WallpaperProcessType {
     PkgTex,
     /// 跳过（不符合条件）
     Skipped,
-}
-
-/// 统计信息
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct StateStatistics {
-    /// 总处理次数
-    #[serde(default)]
-    pub total_runs: u64,
-    /// 总处理壁纸数
-    #[serde(default)]
-    pub total_wallpapers: u64,
-    /// 总 pkg 处理数
-    #[serde(default)]
-    pub total_pkgs: u64,
-    /// 总 tex 转换数
-    #[serde(default)]
-    pub total_texs: u64,
 }
 
 /// create_state_json 接口入参

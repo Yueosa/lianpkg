@@ -343,7 +343,7 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
         DebugLogType::Return,
         "native",
         "load_state",
-        &format!("processed_count={}", state.processed_wallpapers.len()),
+        &format!("processed_count={}", state.processed.len()),
     );
 
     // ========== 阶段2: 扫描壁纸 ==========
@@ -431,9 +431,9 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
     // 更新状态：记录已处理的壁纸
     for result in &paper_result.results {
         let process_type = match result.result_type {
-            native_paper::CopyResultType::Raw => cfg::WallpaperProcessType::Raw,
-            native_paper::CopyResultType::Pkg => cfg::WallpaperProcessType::Pkg,
-            native_paper::CopyResultType::Skipped => cfg::WallpaperProcessType::Skipped,
+            native_paper::CopyResultType::Raw => cfg::ProcessType::Raw,
+            native_paper::CopyResultType::Pkg => cfg::ProcessType::Pkg,
+            native_paper::CopyResultType::Skipped => cfg::ProcessType::Skipped,
         };
 
         native_cfg::add_processed_wallpaper(
@@ -619,12 +619,7 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
         "save_state",
         &input.state_path.display().to_string(),
     );
-    native_cfg::update_statistics(
-        &mut state,
-        stats.wallpapers_processed as u64,
-        stats.pkgs_unpacked as u64,
-        stats.texs_converted as u64,
-    );
+    native_cfg::touch_last_run(&mut state);
 
     let _ = native_cfg::save_state(native_cfg::SaveStateInput {
         state_path: input.state_path,

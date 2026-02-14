@@ -419,7 +419,7 @@ fn run_dry_run(
         });
 
         if let Some(state) = state_result.state {
-            let processed_count = state.processed_wallpapers.len();
+            let processed_count = state.processed.len();
             let to_process = scan_result
                 .wallpapers
                 .iter()
@@ -500,7 +500,7 @@ fn run_dry_run_preview(
         });
 
         if let Some(state) = state_result.state {
-            let processed_count = state.processed_wallpapers.len();
+            let processed_count = state.processed.len();
             let to_process = scan_result
                 .wallpapers
                 .iter()

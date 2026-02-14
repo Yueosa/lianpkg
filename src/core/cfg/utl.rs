@@ -92,7 +92,7 @@ auto_convert_tex = true
 
 /// 生成 state.json 的默认模板内容
 pub fn default_state_template() -> String {
-    "{}".to_string()
+    r#"{"processed":{}}"#.to_string()
 }
 
 /// 确保目录存在，不存在则递归创建
