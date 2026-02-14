@@ -231,13 +231,20 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _DiskEstimateCard extends StatelessWidget {
-  final DiskEstimate estimate;
-  const _DiskEstimateCard({required this.estimate});
+class _DiskUsageCard extends StatelessWidget {
+  final DiskUsage diskUsage;
+  final int processedPkg;
+  final int processedRaw;
+  const _DiskUsageCard({
+    required this.diskUsage,
+    required this.processedPkg,
+    required this.processedRaw,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final f = DiskUsage.formatBytes;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -248,22 +255,14 @@ class _DiskEstimateCard extends StatelessWidget {
               children: [
                 const Icon(Icons.storage, size: 20),
                 const SizedBox(width: 8),
-                Text('磁盘估算', style: theme.textTheme.titleMedium),
+                Text('磁盘占用', style: theme.textTheme.titleMedium),
                 const Spacer(),
-                if (estimate.spaceSufficient)
-                  Chip(
-                    label: const Text('空间充足'),
-                    avatar: const Icon(Icons.check, size: 16),
-                    backgroundColor: Colors.green.shade50,
-                    labelStyle: TextStyle(color: Colors.green.shade700),
-                  )
-                else
-                  Chip(
-                    label: const Text('空间不足'),
-                    avatar: const Icon(Icons.warning, size: 16),
-                    backgroundColor: Colors.red.shade50,
-                    labelStyle: TextStyle(color: Colors.red.shade700),
+                Text(
+                  '合计 ${f(diskUsage.totalOutputSize)}',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -271,29 +270,19 @@ class _DiskEstimateCard extends StatelessWidget {
               spacing: 24,
               runSpacing: 8,
               children: [
-                _DiskStat('PKG 源', DiskEstimate.formatBytes(estimate.pkgSize)),
-                _DiskStat('Raw 源', DiskEstimate.formatBytes(estimate.rawSize)),
                 _DiskStat(
-                  '预估解包',
-                  DiskEstimate.formatBytes(estimate.estimatedUnpacked),
+                  'Raw 输出',
+                  f(diskUsage.rawOutputSize),
+                  subtitle: '$processedRaw 个壁纸',
                 ),
+                _DiskStat('解包产物', f(diskUsage.unpackedOutputSize)),
                 _DiskStat(
-                  '预估转换',
-                  DiskEstimate.formatBytes(estimate.estimatedConverted),
+                  '转换产物',
+                  f(diskUsage.convertedOutputSize),
+                  subtitle: '$processedPkg 个壁纸',
                 ),
-                _DiskStat(
-                  '峰值用量',
-                  DiskEstimate.formatBytes(estimate.estimatedPeak),
-                ),
-                _DiskStat(
-                  '最终用量',
-                  DiskEstimate.formatBytes(estimate.estimatedFinal),
-                ),
-                if (estimate.availableSpace != null)
-                  _DiskStat(
-                    '可用空间',
-                    DiskEstimate.formatBytes(estimate.availableSpace!),
-                  ),
+                if (diskUsage.availableSpace != null)
+                  _DiskStat('可用空间', f(diskUsage.availableSpace!)),
               ],
             ),
           ],
@@ -306,7 +295,8 @@ class _DiskEstimateCard extends StatelessWidget {
 class _DiskStat extends StatelessWidget {
   final String label;
   final String value;
-  const _DiskStat(this.label, this.value);
+  final String? subtitle;
+  const _DiskStat(this.label, this.value, {this.subtitle});
 
   @override
   Widget build(BuildContext context) {
@@ -320,6 +310,13 @@ class _DiskStat extends StatelessWidget {
           ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
         ),
         Text(label, style: Theme.of(context).textTheme.labelSmall),
+        if (subtitle != null)
+          Text(
+            subtitle!,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
       ],
     );
   }
