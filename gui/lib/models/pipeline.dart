@@ -63,58 +63,84 @@ class AutoPipelineStats {
 }
 
 class CopyOutput {
-  final int copiedCount;
-  final int skippedCount;
-  final int errorCount;
+  final int rawCopied;
+  final int pkgCopied;
+  final int skipped;
+  final int totalPkgFiles;
 
   const CopyOutput({
-    this.copiedCount = 0,
-    this.skippedCount = 0,
-    this.errorCount = 0,
+    this.rawCopied = 0,
+    this.pkgCopied = 0,
+    this.skipped = 0,
+    this.totalPkgFiles = 0,
   });
 
   factory CopyOutput.fromJson(Map<String, dynamic> json) {
+    final stats = json['stats'] as Map<String, dynamic>? ?? {};
     return CopyOutput(
-      copiedCount: json['copied_count'] as int? ?? 0,
-      skippedCount: json['skipped_count'] as int? ?? 0,
-      errorCount: json['error_count'] as int? ?? 0,
+      rawCopied: stats['raw_copied'] as int? ?? 0,
+      pkgCopied: stats['pkg_copied'] as int? ?? 0,
+      skipped: stats['skipped'] as int? ?? 0,
+      totalPkgFiles: stats['total_pkg_files'] as int? ?? 0,
     );
   }
+
+  int get copiedCount => rawCopied + pkgCopied;
 }
 
 class UnpackOutput {
-  final int unpackedCount;
-  final int errorCount;
+  final int pkgProcessed;
+  final int pkgSuccess;
+  final int pkgFailed;
+  final int totalFiles;
+  final int texFiles;
 
-  const UnpackOutput({this.unpackedCount = 0, this.errorCount = 0});
+  const UnpackOutput({
+    this.pkgProcessed = 0,
+    this.pkgSuccess = 0,
+    this.pkgFailed = 0,
+    this.totalFiles = 0,
+    this.texFiles = 0,
+  });
 
   factory UnpackOutput.fromJson(Map<String, dynamic> json) {
+    final stats = json['stats'] as Map<String, dynamic>? ?? {};
     return UnpackOutput(
-      unpackedCount: json['unpacked_count'] as int? ?? 0,
-      errorCount: json['error_count'] as int? ?? 0,
+      pkgProcessed: stats['pkg_processed'] as int? ?? 0,
+      pkgSuccess: stats['pkg_success'] as int? ?? 0,
+      pkgFailed: stats['pkg_failed'] as int? ?? 0,
+      totalFiles: stats['total_files'] as int? ?? 0,
+      texFiles: stats['tex_files'] as int? ?? 0,
     );
   }
 }
 
 class ConvertOutput {
+  final int texProcessed;
+  final int texSuccess;
+  final int texFailed;
+  final int texSkipped;
   final int imageCount;
   final int videoCount;
-  final int errorCount;
-  final int skippedCount;
 
   const ConvertOutput({
+    this.texProcessed = 0,
+    this.texSuccess = 0,
+    this.texFailed = 0,
+    this.texSkipped = 0,
     this.imageCount = 0,
     this.videoCount = 0,
-    this.errorCount = 0,
-    this.skippedCount = 0,
   });
 
   factory ConvertOutput.fromJson(Map<String, dynamic> json) {
+    final stats = json['stats'] as Map<String, dynamic>? ?? {};
     return ConvertOutput(
-      imageCount: json['image_count'] as int? ?? 0,
-      videoCount: json['video_count'] as int? ?? 0,
-      errorCount: json['error_count'] as int? ?? 0,
-      skippedCount: json['skipped_count'] as int? ?? 0,
+      texProcessed: stats['tex_processed'] as int? ?? 0,
+      texSuccess: stats['tex_success'] as int? ?? 0,
+      texFailed: stats['tex_failed'] as int? ?? 0,
+      texSkipped: stats['tex_skipped'] as int? ?? 0,
+      imageCount: stats['image_count'] as int? ?? 0,
+      videoCount: stats['video_count'] as int? ?? 0,
     );
   }
 }

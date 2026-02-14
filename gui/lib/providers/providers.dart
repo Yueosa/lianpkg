@@ -31,8 +31,10 @@ final initProvider = FutureProvider<LianpkgConfig>((ref) async {
 
 final configProvider = FutureProvider<LianpkgConfig>((ref) async {
   // 确保先完成初始化
-  final initConfig = await ref.watch(initProvider.future);
-  return initConfig;
+  await ref.watch(initProvider.future);
+  // 每次都从 Rust 端重新读取配置（而非返回缓存的 initConfig）
+  final service = ref.read(lianpkgServiceProvider);
+  return service.getConfig();
 });
 
 // ============================================================================
