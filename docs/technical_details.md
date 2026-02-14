@@ -343,12 +343,10 @@ else:
          │                          │
          ▼                          ▼
    ┌───────────┐              ┌───────────────┐
-   │ 复制到     │              │ 复制 .pkg 到   │
-   │ Wallpapers │             │ Pkg_Temp/     │
-   │ _Raw/      │             │ (重命名: ID_   │
-   └───────────┘              │  文件名.pkg)   │
-                              └───────┬───────┘
-                                      │
+   │ 复制到     │              │ 直接从 Workshop│
+   │ Wallpapers │             │ 读取 PKG 解包  │
+   │ _Raw/      │             └───────┬───────┘
+   └───────────┘                      │
                               ┌───────▼────────┐
                               │  Phase 2: 解包  │ 解析 PKG → 提取文件
                               │  → Pkg_Unpacked/│
@@ -360,10 +358,12 @@ else:
                               └───────┬────────┘
                                       │
                               ┌───────▼────────┐
-                              │  Phase 4: 清理  │ 删除临时文件
+                              │  Phase 4: 清理  │ 删除中间产物
                               │  保留最终产物     │
                               └────────────────┘
 ```
+
+> 旧版中有一个 `Pkg_Temp` 中间目录用于缓存 PKG 文件副本，v2.0 已将其消除，现在直接从 Workshop 源路径读取 PKG 解包。
 
 ### 最终输出目录结构
 
@@ -373,8 +373,6 @@ else:
 │   ├── 987654321/
 │   │   └── scene.mp4
 │   └── ...
-│
-├── Pkg_Temp/                ← 临时目录（默认会被清理）
 │
 └── Pkg_Unpacked/
     └── 123456789/           ← 壁纸ID
@@ -412,14 +410,17 @@ src/
 │   └── tex/           ← TEX 文件解析、解码与转换
 │
 ├── api/               ← 📡 对外接口层
-│   ├── types.rs       ← 通用返回类型
-│   ├── native/        ← Rust 原生 API（CLI 和未来 GUI 共用）
-│   │   ├── cfg.rs     ← 配置管理 API
-│   │   ├── paper.rs   ← 壁纸处理 API
-│   │   ├── pkg.rs     ← PKG 处理 API
-│   │   ├── tex.rs     ← TEX 处理 API
-│   │   └── pipeline.rs← 流水线 API（编排完整流程）
+│   ├── native/        ← Rust 原生 API（CLI 和 GUI 共用）
+│   │   ├── context.rs ← 应用上下文与配置管理
+│   │   ├── scan.rs    ← 壁纸扫描与复制
+│   │   ├── auto.rs    ← 流水线 API（编排完整流程）
+│   │   ├── pkg.rs     ← PKG 解包 API
+│   │   ├── tex.rs     ← TEX 转换 API（rayon 多线程）
+│   │   └── util.rs    ← 内部工具函数
 │   └── ffi/           ← C FFI 层（供 Flutter 等调用）
+│       ├── mod.rs     ← lianpkg_call / lianpkg_free_string
+│       ├── dispatch.rs← action 分发器（15 种操作）
+│       └── types.rs   ← 请求/响应/进度类型定义
 │
 └── cli/               ← 🖥️ 命令行界面层
     ├── args.rs        ← clap 参数定义
@@ -458,8 +459,11 @@ CLI (handlers/)  ──调用──▶  API (native/)  ──调用──▶  Co
 | `texture2ddecoder` | DXT/BC 纹理解码 | 专门处理 GPU 纹理格式 |
 | `image` | RGBA 像素 → PNG 编码 | Rust 生态标准图像库 |
 | `byteorder` | 小端序二进制读取 | TEX reader 使用 |
+| `rayon` | TEX 并行转换 | 充分利用多核 CPU，大幅提升批量转换速度 |
 | `clap` | 命令行参数解析 | 自动生成帮助文档，支持子命令 |
 | `serde` + `toml` + `serde_json` | 配置文件序列化 | Config.toml 和 State.json |
+| `chrono` | ISO 8601 时间戳 | state.json 中的 processed_at / last_run |
+| `human_bytes` | 人类可读字节数 | CLI 磁盘空间显示 |
 | `dirs` | 跨平台目录解析 | 获取 ~/.config 等标准目录 |
 | `fs2` | 磁盘空间查询 | 跨平台获取可用空间 |
 | `unicode-width` | CJK 字符宽度 | 终端表格的正确对齐 |
@@ -481,14 +485,14 @@ DXT 解码器输出的像素顺序是 BGRA（而非 RGBA）在某些实现中可
 
 ### Q: PKG 内的文件名有中文会乱码吗？
 
-PKG 使用 UTF-8 编码存储文件名。LianPkg 在读取时使用 `from_utf8_lossy`，即使遇到无效 UTF-8 也不会崩溃（会替换为 `�`）。
+PKG 使用 UTF-8 编码存储文件名。LianPkg 的 PKG Reader 使用 `String::from_utf8()`，如果遇到无效 UTF-8 会返回 `CoreError::InvalidData` 错误（不会崩溃）。TEX Reader 则使用 `from_utf8_lossy`，无效字节替换为 `�`。
 
 ### Q: 处理 1000+ 壁纸大概需要多少时间和空间？
 
 - **时间**：取决于 PKG 数量和 TEX 解码复杂度，通常 5-30 分钟
-- **空间峰值**：约为 PKG 总大小的 4.5 倍（PKG临时 + 解包 ×1.5 + 转换 ×2）
+- **空间峰值**：约为 PKG 总大小的 3.5 倍 + 原始壁纸大小（解包 ×1.5 + 转换 ×2.0 + Raw）
 - **最终占用**：启用清理后，仅保留 `tex_converted` 和 `Wallpapers_Raw`
 
 ---
 
-*本文档最后更新于 2026-02-14，对应 LianPkg v1.0.0。*
+*本文档最后更新于 2026-02-15，对应 LianPkg v2.0.1。*
