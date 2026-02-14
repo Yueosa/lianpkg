@@ -46,76 +46,75 @@ class ProcessedEntry {
 }
 
 class StatusInfo {
+  final int totalWallpapers;
   final int totalProcessed;
-  final int pkgCount;
-  final int rawCount;
-  final int skippedCount;
+  final int processedPkg;
+  final int processedRaw;
+  final int processedSkipped;
+  final int pendingTotal;
+  final int pendingPkg;
+  final int pendingRaw;
+  final int pendingPkgSize;
   final String? lastRun;
-  final DiskEstimate diskEstimate;
+  final DiskUsage diskUsage;
 
   const StatusInfo({
+    this.totalWallpapers = 0,
     this.totalProcessed = 0,
-    this.pkgCount = 0,
-    this.rawCount = 0,
-    this.skippedCount = 0,
+    this.processedPkg = 0,
+    this.processedRaw = 0,
+    this.processedSkipped = 0,
+    this.pendingTotal = 0,
+    this.pendingPkg = 0,
+    this.pendingRaw = 0,
+    this.pendingPkgSize = 0,
     this.lastRun,
-    this.diskEstimate = const DiskEstimate(),
+    this.diskUsage = const DiskUsage(),
   });
 
   factory StatusInfo.fromJson(Map<String, dynamic> json) {
     return StatusInfo(
+      totalWallpapers: json['total_wallpapers'] as int? ?? 0,
       totalProcessed: json['total_processed'] as int? ?? 0,
-      pkgCount: json['pkg_count'] as int? ?? 0,
-      rawCount: json['raw_count'] as int? ?? 0,
-      skippedCount: json['skipped_count'] as int? ?? 0,
+      processedPkg: json['processed_pkg'] as int? ?? 0,
+      processedRaw: json['processed_raw'] as int? ?? 0,
+      processedSkipped: json['processed_skipped'] as int? ?? 0,
+      pendingTotal: json['pending_total'] as int? ?? 0,
+      pendingPkg: json['pending_pkg'] as int? ?? 0,
+      pendingRaw: json['pending_raw'] as int? ?? 0,
+      pendingPkgSize: json['pending_pkg_size'] as int? ?? 0,
       lastRun: json['last_run'] as String?,
-      diskEstimate: DiskEstimate.fromJson(
-        json['disk_estimate'] as Map<String, dynamic>? ?? {},
+      diskUsage: DiskUsage.fromJson(
+        json['disk_usage'] as Map<String, dynamic>? ?? {},
       ),
     );
   }
 }
 
-/// 磁盘用量估算
-class DiskEstimate {
-  final int pkgSize;
-  final int rawSize;
-  final int pkgCount;
-  final int rawCount;
-  final int estimatedUnpacked;
-  final int estimatedConverted;
-  final int estimatedPeak;
-  final int estimatedFinal;
+/// 实际磁盘占用
+class DiskUsage {
+  final int rawOutputSize;
+  final int unpackedOutputSize;
+  final int convertedOutputSize;
   final int? availableSpace;
-  final bool spaceSufficient;
 
-  const DiskEstimate({
-    this.pkgSize = 0,
-    this.rawSize = 0,
-    this.pkgCount = 0,
-    this.rawCount = 0,
-    this.estimatedUnpacked = 0,
-    this.estimatedConverted = 0,
-    this.estimatedPeak = 0,
-    this.estimatedFinal = 0,
+  const DiskUsage({
+    this.rawOutputSize = 0,
+    this.unpackedOutputSize = 0,
+    this.convertedOutputSize = 0,
     this.availableSpace,
-    this.spaceSufficient = true,
   });
 
-  factory DiskEstimate.fromJson(Map<String, dynamic> json) {
-    return DiskEstimate(
-      pkgSize: json['pkg_size'] as int? ?? 0,
-      rawSize: json['raw_size'] as int? ?? 0,
-      pkgCount: json['pkg_count'] as int? ?? 0,
-      rawCount: json['raw_count'] as int? ?? 0,
-      estimatedUnpacked: json['estimated_unpacked'] as int? ?? 0,
-      estimatedConverted: json['estimated_converted'] as int? ?? 0,
-      estimatedPeak: json['estimated_peak'] as int? ?? 0,
-      estimatedFinal: json['estimated_final'] as int? ?? 0,
+  factory DiskUsage.fromJson(Map<String, dynamic> json) {
+    return DiskUsage(
+      rawOutputSize: json['raw_output_size'] as int? ?? 0,
+      unpackedOutputSize: json['unpacked_output_size'] as int? ?? 0,
+      convertedOutputSize: json['converted_output_size'] as int? ?? 0,
       availableSpace: json['available_space'] as int?,
-      spaceSufficient: json['space_sufficient'] as bool? ?? true,
     );
   }
+
+  int get totalOutputSize => rawOutputSize + unpackedOutputSize + convertedOutputSize;
 
   /// 格式化字节为可读字符串
   static String formatBytes(int bytes) {
