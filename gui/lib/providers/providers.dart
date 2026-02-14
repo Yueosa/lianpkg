@@ -17,12 +17,22 @@ final lianpkgServiceProvider = Provider<LianpkgService>((ref) {
 });
 
 // ============================================================================
-// 配置
+// 初始化（单次调用，其他 provider 依赖此 provider）
+// ============================================================================
+
+final initProvider = FutureProvider<LianpkgConfig>((ref) async {
+  final service = ref.read(lianpkgServiceProvider);
+  return service.init();
+});
+
+// ============================================================================
+// 配置（依赖 init 完成后再获取）
 // ============================================================================
 
 final configProvider = FutureProvider<LianpkgConfig>((ref) async {
-  final service = ref.read(lianpkgServiceProvider);
-  return service.getConfig();
+  // 确保先完成初始化
+  final initConfig = await ref.watch(initProvider.future);
+  return initConfig;
 });
 
 // ============================================================================
@@ -30,9 +40,9 @@ final configProvider = FutureProvider<LianpkgConfig>((ref) async {
 // ============================================================================
 
 final scanResultProvider = FutureProvider<ScanResult>((ref) async {
+  // 确保先完成初始化
+  await ref.watch(initProvider.future);
   final service = ref.read(lianpkgServiceProvider);
-  // 先确保已初始化
-  await service.init();
   return service.scan();
 });
 
@@ -41,11 +51,13 @@ final scanResultProvider = FutureProvider<ScanResult>((ref) async {
 // ============================================================================
 
 final statusProvider = FutureProvider<StatusInfo>((ref) async {
+  await ref.watch(initProvider.future);
   final service = ref.read(lianpkgServiceProvider);
   return service.getStatus();
 });
 
 final stateProvider = FutureProvider<StateData>((ref) async {
+  await ref.watch(initProvider.future);
   final service = ref.read(lianpkgServiceProvider);
   return service.getState();
 });
