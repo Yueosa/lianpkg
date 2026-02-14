@@ -1,6 +1,12 @@
+<div align="center">
+
+![ico](./avatar-modified.ico)
+
 # LianPkg ✨
 
 LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它可以提取壁纸文件、解包 `.pkg` 文件以及将 `.tex` 纹理转换为常见的图像/视频格式，支持 Linux 与 Windows。
+
+</div>
 
 ### 特性
 
