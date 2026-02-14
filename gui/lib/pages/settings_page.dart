@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/providers.dart';
+import '../utils/open_folder.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -142,13 +143,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: const Text('启用 Raw 输出'),
               subtitle: const Text('直接复制非 PKG 壁纸到输出目录'),
               value: config.enableRawOutput,
-              onChanged: (v) => _setConfig('wallpaper.enable_raw_output', v.toString()),
+              onChanged: (v) =>
+                  _setConfig('wallpaper.enable_raw_output', v.toString()),
             ),
             SwitchListTile(
               title: const Text('清理解包中间文件'),
               subtitle: const Text('转换 TEX 后删除解包的中间文件'),
               value: config.cleanUnpacked,
-              onChanged: (v) => _setConfig('unpack.clean_unpacked', v.toString()),
+              onChanged: (v) =>
+                  _setConfig('unpack.clean_unpacked', v.toString()),
             ),
             const Divider(),
 
@@ -231,15 +234,32 @@ class _PathFieldState extends State<_PathField> {
         decoration: InputDecoration(
           labelText: widget.label,
           border: const OutlineInputBorder(),
-          suffixIcon: _dirty
-              ? IconButton(
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.folder_open),
+                tooltip: '在文件管理器中打开',
+                onPressed: () async {
+                  final path = _controller.text;
+                  final ok = await openFolder(path);
+                  if (!ok && context.mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('无法打开: $path')));
+                  }
+                },
+              ),
+              if (_dirty)
+                IconButton(
                   icon: const Icon(Icons.save),
                   onPressed: () {
                     widget.onSave(_controller.text);
                     setState(() => _dirty = false);
                   },
-                )
-              : null,
+                ),
+            ],
+          ),
         ),
         onChanged: (v) {
           if (!_dirty) setState(() => _dirty = true);
