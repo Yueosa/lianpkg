@@ -116,22 +116,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _PathField(
               label: 'Workshop 路径',
               value: config.workshopPath,
-              onSave: (v) => _setConfig('workshop_path', v),
+              onSave: (v) => _setConfig('wallpaper.workshop_path', v),
             ),
             _PathField(
               label: 'Raw 输出路径',
               value: config.rawOutputPath,
-              onSave: (v) => _setConfig('raw_output_path', v),
+              onSave: (v) => _setConfig('wallpaper.raw_output_path', v),
             ),
             _PathField(
               label: '解包输出路径',
               value: config.unpackedOutputPath,
-              onSave: (v) => _setConfig('unpacked_output_path', v),
+              onSave: (v) => _setConfig('unpack.unpacked_output_path', v),
             ),
             _PathField(
               label: '转换输出路径',
               value: config.convertedOutputPath,
-              onSave: (v) => _setConfig('converted_output_path', v),
+              onSave: (v) => _setConfig('tex.converted_output_path', v),
             ),
             const SizedBox(height: 24),
 
@@ -142,13 +142,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: const Text('启用 Raw 输出'),
               subtitle: const Text('直接复制非 PKG 壁纸到输出目录'),
               value: config.enableRawOutput,
-              onChanged: (v) => _setConfig('enable_raw_output', v.toString()),
+              onChanged: (v) => _setConfig('wallpaper.enable_raw_output', v.toString()),
             ),
             SwitchListTile(
               title: const Text('清理解包中间文件'),
               subtitle: const Text('转换 TEX 后删除解包的中间文件'),
               value: config.cleanUnpacked,
-              onChanged: (v) => _setConfig('clean_unpacked', v.toString()),
+              onChanged: (v) => _setConfig('unpack.clean_unpacked', v.toString()),
             ),
             const Divider(),
 

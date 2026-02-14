@@ -223,8 +223,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       if (mounted) {
         setState(() {
           _unpackResult =
-              '解包完成: ${output.unpackedCount} 个文件'
-              '${output.errorCount > 0 ? ', ${output.errorCount} 个错误' : ''}';
+              '解包完成: ${output.totalFiles} 个文件 '
+              '(${output.pkgSuccess} 个 PKG 成功, '
+              '${output.texFiles} 个 TEX)'
+              '${output.pkgFailed > 0 ? ', ${output.pkgFailed} 个失败' : ''}';
         });
       }
     } catch (e) {
@@ -251,7 +253,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           _convertResult =
               '转换完成: ${output.imageCount} 张图片, '
               '${output.videoCount} 个视频'
-              '${output.errorCount > 0 ? ', ${output.errorCount} 个错误' : ''}';
+              '${output.texFailed > 0 ? ', ${output.texFailed} 个错误' : ''}';
         });
       }
     } catch (e) {

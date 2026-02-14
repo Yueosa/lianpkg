@@ -373,29 +373,26 @@ class _ResultPanel extends StatelessWidget {
                 _ResultStat('TEX 转换', output.stats.texsConverted),
                 if (output.copyOutput != null) ...[
                   _ResultStat('Raw 复制', output.copyOutput!.copiedCount),
-                  if (output.copyOutput!.errorCount > 0)
-                    _ResultStat(
-                      'Raw 错误',
-                      output.copyOutput!.errorCount,
-                      isError: true,
-                    ),
+                  if (output.copyOutput!.skipped > 0)
+                    _ResultStat('跳过', output.copyOutput!.skipped),
                 ],
                 if (output.pkgOutput != null) ...[
-                  _ResultStat('解包数', output.pkgOutput!.unpackedCount),
-                  if (output.pkgOutput!.errorCount > 0)
+                  _ResultStat('解包文件', output.pkgOutput!.totalFiles),
+                  _ResultStat('TEX 文件', output.pkgOutput!.texFiles),
+                  if (output.pkgOutput!.pkgFailed > 0)
                     _ResultStat(
                       '解包错误',
-                      output.pkgOutput!.errorCount,
+                      output.pkgOutput!.pkgFailed,
                       isError: true,
                     ),
                 ],
                 if (output.texOutput != null) ...[
                   _ResultStat('图片', output.texOutput!.imageCount),
                   _ResultStat('视频', output.texOutput!.videoCount),
-                  if (output.texOutput!.errorCount > 0)
+                  if (output.texOutput!.texFailed > 0)
                     _ResultStat(
                       'TEX 错误',
-                      output.texOutput!.errorCount,
+                      output.texOutput!.texFailed,
                       isError: true,
                     ),
                 ],
