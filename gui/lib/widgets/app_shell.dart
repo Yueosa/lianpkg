@@ -69,10 +69,13 @@ class AppShell extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Column(
                 children: [
-                  Icon(
-                    Icons.wallpaper,
-                    size: 32,
-                    color: theme.colorScheme.primary,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.asset(
+                      'assets/icon.png',
+                      width: 32,
+                      height: 32,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
