@@ -2,25 +2,14 @@
 
 use super::super::args::TexArgs;
 use super::super::output as out;
-use lianpkg::api::native::{context, tex};
+use lianpkg::api::native::tex;
 use lianpkg::core::path;
 use std::fs;
 use std::path::PathBuf;
 
 /// 执行 tex 命令
 pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
-    // 加载配置
-    out::debug_api_enter(
-        "native",
-        "init",
-        &format!("config_path={:?}", config_path),
-    );
-    let config_dir = config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf());
-    let ctx = context::init(config_dir).map_err(|e| e.to_string())?;
-    out::debug_api_return(&format!(
-        "config_path={}",
-        ctx.config_path.display()
-    ));
+    let ctx = super::init_context(config_path)?;
 
     // 确定路径
     let input_path = args
