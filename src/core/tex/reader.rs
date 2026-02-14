@@ -7,12 +7,12 @@ use crate::core::tex::structs::*;
 
 /// 读取 TEX 文件结构
 pub(crate) fn read_tex<R: Read + Seek>(mut reader: R) -> CoreResult<TexFile> {
-    let magic1 = read_fixed_string(&mut reader, 16)?;
+    let magic1 = read_null_terminated_string(&mut reader, 16)?;
     if magic1 != "TEXV0005" {
         return Err(CoreError::invalid_data(format!("Invalid Magic1: '{}'", magic1)));
     }
 
-    let magic2 = read_fixed_string(&mut reader, 16)?;
+    let magic2 = read_null_terminated_string(&mut reader, 16)?;
     if magic2 != "TEXI0001" {
         return Err(CoreError::invalid_data(format!("Invalid Magic2: '{}'", magic2)));
     }
