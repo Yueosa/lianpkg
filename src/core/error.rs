@@ -3,30 +3,39 @@
 //! 提供 core 模块的统一错误类型和 Result 别名。
 //! 所有 core 子模块的接口函数都应返回 `CoreResult<T>`。
 
-use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// 核心错误类型
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// 覆盖 lianpkg core 层的所有错误场景。
+/// 每个变体都提供便捷构造函数，推荐使用 `CoreError::xxx()` 而非直接构造。
+#[derive(Debug, Clone)]
 pub enum CoreError {
-    /// 文件/目录 I/O 错误
+    /// 文件/目录 I/O 错误（读写失败、权限不足等）
     Io {
         message: String,
         path: Option<String>,
     },
-    /// 解析错误 (TOML/JSON/PKG/TEX)
+
+    /// 解析错误（TOML/JSON/VDF 等格式解析失败）
     Parse {
         message: String,
         source: Option<String>,
     },
-    /// 验证错误 (参数无效、格式不符等)
+
+    /// 数据无效（二进制文件校验失败：magic bytes 不匹配、偏移越界等）
+    InvalidData { context: String },
+
+    /// 验证错误（参数无效、配置项不合法等）
     Validation { message: String },
-    /// 未找到 (文件/目录/条目不存在)
+
+    /// 未找到（文件/目录/条目不存在）
     NotFound {
         message: String,
         path: Option<String>,
     },
-    /// 格式不支持 (未知的文件格式等)
+
+    /// 格式不支持（未知的 TEX 格式、不支持的版本号等）
     Unsupported { message: String },
 }
 
@@ -46,6 +55,9 @@ impl fmt::Display for CoreError {
                 } else {
                     write!(f, "Parse error: {}", message)
                 }
+            }
+            CoreError::InvalidData { context } => {
+                write!(f, "Invalid data: {}", context)
             }
             CoreError::Validation { message } => {
                 write!(f, "Validation error: {}", message)
@@ -106,6 +118,13 @@ impl CoreError {
         }
     }
 
+    /// 创建数据无效错误
+    pub fn invalid_data(context: impl Into<String>) -> Self {
+        CoreError::InvalidData {
+            context: context.into(),
+        }
+    }
+
     /// 创建验证错误
     pub fn validation(msg: impl Into<String>) -> Self {
         CoreError::Validation {
@@ -138,7 +157,7 @@ impl CoreError {
 }
 
 // ============================================================================
-// From 实现 - 方便从标准库错误转换
+// From 实现 — 方便从标准库/第三方错误自动转换
 // ============================================================================
 
 impl From<std::io::Error> for CoreError {
@@ -164,6 +183,15 @@ impl From<serde_json::Error> for CoreError {
         CoreError::Parse {
             message: err.to_string(),
             source: Some("JSON".to_string()),
+        }
+    }
+}
+
+impl From<image::ImageError> for CoreError {
+    fn from(err: image::ImageError) -> Self {
+        CoreError::Io {
+            message: err.to_string(),
+            path: None,
         }
     }
 }
