@@ -341,8 +341,10 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
     let workshop_path = wallpaper
         .get("workshop_path")
         .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
         .map(path::expand_path_compat)
-        .unwrap_or_else(|| PathBuf::from(path::default_workshop_path()));
+        .or_else(|| path::detect_workshop_path().ok())
+        .unwrap_or_else(|| PathBuf::from("/nonexistent/workshop"));
 
     let raw_output_path = wallpaper
         .get("raw_output_path")
@@ -355,11 +357,12 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
+    // pkg_temp 已废弃，fallback 到 unpacked 路径下的 .pkg_temp 子目录
     let pkg_temp_path = wallpaper
         .get("pkg_temp_path")
         .and_then(|v| v.as_str())
         .map(path::expand_path_compat)
-        .unwrap_or_else(|| PathBuf::from(path::default_pkg_temp_path()));
+        .unwrap_or_else(|| path::expand_path_compat(&path::default_unpacked_output_path()).join(".pkg_temp"));
 
     // 解析 [unpack] 部分
     let unpack = doc.get("unpack").and_then(|v| v.as_table());

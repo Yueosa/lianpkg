@@ -12,12 +12,13 @@ fn escape_path_for_toml(path: &str) -> String {
 /// 生成 config.toml 的默认模板内容
 /// 使用 core/path 模块获取平台相关的默认路径
 pub fn default_config_template() -> String {
-    let wp = escape_path_for_toml(&path::default_workshop_path());
+    // workshop_path: 留空表示自动探测
+    let wp = path::detect_workshop_path()
+        .map(|p| escape_path_for_toml(&p.display().to_string()))
+        .unwrap_or_default();
     let raw_out = escape_path_for_toml(&path::default_raw_output_path());
-    let pkg_temp = escape_path_for_toml(&path::default_pkg_temp_path());
     let enable_raw = true;
     let unpack_out = escape_path_for_toml(&path::default_unpacked_output_path());
-    let clean_pkg_temp = true;
     let clean_unpacked = true;
     let converted_hint = String::new();
 
@@ -39,6 +40,7 @@ pub fn default_config_template() -> String {
 #     本程序将会从这个路径下扫描 wallpaper 壁纸
 #         - Windows 默认: C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\431960
 #         - Linux 默认: ~/.local/share/Steam/steamapps/workshop/content/431960
+# 留空则自动探测 Steam Workshop 路径
 workshop_path = "{wp}"
 
 # === 不需要解包的壁纸输出路径 ===
@@ -52,13 +54,6 @@ raw_output_path = "{raw_out}"
 #     Default/默认: true
 enable_raw_output = {enable_raw}
 
-# === 需要解包的 .pkg 文件暂存路径 === 
-#     为了不影响 wallpaper 结构, 本程序将会复制一份 .pkg 到这个临时文件夹
-#     解包完成后就会清空, 如果你需要保留 .pkg 源文件可以在下面配置 clean_pkg_temp = false
-#         - Windows 默认: .\\Pkg_Temp
-#         - Linux 默认: ~/.local/share/lianpkg/Pkg_Temp
-pkg_temp_path = "{pkg_temp}"
-
 
 [unpack]
 # === 解包后的文件输出路径 ===
@@ -66,9 +61,6 @@ pkg_temp_path = "{pkg_temp}"
 #         - Windows 默认: .\\Pkg_Unpacked
 #         - Linux 默认: ~/.local/share/lianpkg/Pkg_Unpacked
 unpacked_output_path = "{unpack_out}"
-
-# === 是否在结束时清理 Pkg_Temp 目录===
-clean_pkg_temp = {clean_pkg_temp}
 
 # === 是否在结束时清理 Pkg_Unpacked 中除 tex_converted 以外的内容 ===
 clean_unpacked = {clean_unpacked}

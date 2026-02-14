@@ -10,7 +10,6 @@ use crate::core::paper::structs::{
 };
 use crate::core::paper::scan::check_pkg;
 use crate::core::paper::utl::copy_dir_recursive;
-use crate::core::path;
 
 /// 处理单个壁纸文件夹
 /// 根据是否包含 pkg 文件决定复制方式
@@ -55,7 +54,7 @@ pub fn process_folder(input: ProcessFolderInput) -> ProcessFolderOutput {
 
         for pkg_path in &check_result.pkg_files {
             if let Some(file_name) = pkg_path.file_name().and_then(|n| n.to_str()) {
-                let new_name = path::pkg_temp_dest(&dir_name, file_name);
+                let new_name = format!("{}_{}", dir_name, file_name);
                 let dest = pkg_temp_output.join(&new_name);
                 
                 if fs::copy(pkg_path, &dest).is_ok() {

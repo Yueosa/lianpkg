@@ -99,9 +99,13 @@ fn show_path(config_path: &std::path::Path, state_path: &std::path::Path) -> Res
     // 默认路径
     out::subtitle("Default Paths");
     out::stat("Default Config Dir", path::default_config_dir().display());
-    out::stat("Default Workshop", path::default_workshop_path());
+    out::stat(
+        "Workshop (detected)",
+        path::detect_workshop_path()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| "<not found>".to_string()),
+    );
     out::stat("Default Raw Output", path::default_raw_output_path());
-    out::stat("Default PKG Temp", path::default_pkg_temp_path());
     out::stat("Default Unpacked", path::default_unpacked_output_path());
 
     Ok(())
