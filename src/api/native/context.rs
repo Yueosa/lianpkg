@@ -89,16 +89,6 @@ pub fn init(config_dir: Option<PathBuf>) -> CoreResult<AppContext> {
     })
 }
 
-/// Windows 专用：优先使用 exe 同目录的初始化
-///
-/// 当 `config_dir` 为 None 且在 Windows 上运行时，
-/// 尝试使用 exe 所在目录作为配置目录。
-#[cfg(target_os = "windows")]
-pub fn init_with_exe_dir(config_dir: Option<PathBuf>) -> CoreResult<AppContext> {
-    let dir = config_dir.or_else(|| path::exe_config_dir());
-    init(dir)
-}
-
 // ============================================================================
 // 配置加载与保存
 // ============================================================================
