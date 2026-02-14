@@ -23,82 +23,65 @@ class ScanResult {
 class WallpaperInfo {
   final String id;
   final String? title;
+  final String? wallpaperType; // Rust 原始类型: "scene"/"video"/"web" 等
   final String? previewPath;
-  final WallpaperType wallpaperType;
-  final bool processed;
+  final bool hasPkg;
+  final bool isProcessed;
   final List<String> pkgFiles;
-  final List<String> texFiles;
-  final String workshopDir;
+  final String folderPath;
 
   const WallpaperInfo({
     required this.id,
     this.title,
+    this.wallpaperType,
     this.previewPath,
-    required this.wallpaperType,
-    required this.processed,
+    required this.hasPkg,
+    required this.isProcessed,
     required this.pkgFiles,
-    required this.texFiles,
-    required this.workshopDir,
+    required this.folderPath,
   });
 
   factory WallpaperInfo.fromJson(Map<String, dynamic> json) {
     return WallpaperInfo(
-      id: json['id'] as String? ?? '',
+      id: json['wallpaper_id'] as String? ?? '',
       title: json['title'] as String?,
+      wallpaperType: json['wallpaper_type'] as String?,
       previewPath: json['preview_path'] as String?,
-      wallpaperType: WallpaperType.fromString(
-        json['wallpaper_type'] as String? ?? 'Raw',
-      ),
-      processed: json['processed'] as bool? ?? false,
+      hasPkg: json['has_pkg'] as bool? ?? false,
+      isProcessed: json['is_processed'] as bool? ?? false,
       pkgFiles: (json['pkg_files'] as List<dynamic>?)?.cast<String>() ?? [],
-      texFiles: (json['tex_files'] as List<dynamic>?)?.cast<String>() ?? [],
-      workshopDir: json['workshop_dir'] as String? ?? '',
+      folderPath: json['folder_path'] as String? ?? '',
     );
   }
+
+  /// 基于 has_pkg 判断壁纸分类
+  WallpaperCategory get category =>
+      hasPkg ? WallpaperCategory.pkg : WallpaperCategory.raw;
 }
 
-enum WallpaperType {
+/// 壁纸分类（基于是否含 PKG 文件）
+enum WallpaperCategory {
   pkg,
-  raw,
-  skipped;
-
-  static WallpaperType fromString(String s) {
-    return switch (s.toLowerCase()) {
-      'pkg' || 'pkgtex' => WallpaperType.pkg,
-      'raw' => WallpaperType.raw,
-      _ => WallpaperType.skipped,
-    };
-  }
+  raw;
 
   String get label => switch (this) {
-    WallpaperType.pkg => 'PKG',
-    WallpaperType.raw => 'Raw',
-    WallpaperType.skipped => 'Skipped',
+    WallpaperCategory.pkg => 'PKG',
+    WallpaperCategory.raw => 'Raw',
   };
 }
 
 class ScanStats {
-  final int total;
-  final int pkg;
-  final int raw;
-  final int processed;
-  final int unprocessed;
+  final int totalCount;
+  final int pkgCount;
+  final int rawCount;
 
-  const ScanStats({
-    this.total = 0,
-    this.pkg = 0,
-    this.raw = 0,
-    this.processed = 0,
-    this.unprocessed = 0,
-  });
+  const ScanStats({this.totalCount = 0, this.pkgCount = 0, this.rawCount = 0});
 
   factory ScanStats.fromJson(Map<String, dynamic> json) {
     return ScanStats(
-      total: json['total'] as int? ?? 0,
-      pkg: json['pkg'] as int? ?? 0,
-      raw: json['raw'] as int? ?? 0,
-      processed: json['processed'] as int? ?? 0,
-      unprocessed: json['unprocessed'] as int? ?? 0,
+      totalCount: json['total_count'] as int? ?? 0,
+      pkgCount: json['pkg_count'] as int? ?? 0,
+      rawCount: json['raw_count'] as int? ?? 0,
     );
   }
 }
