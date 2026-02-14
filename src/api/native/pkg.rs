@@ -11,11 +11,20 @@ use std::path::PathBuf;
 // 结构体定义
 // ============================================================================
 
+/// PKG 文件来源（壁纸 ID + 对应的 Workshop PKG 路径列表）
+#[derive(Debug, Clone)]
+pub struct PkgSource {
+    /// 壁纸 ID（Workshop 文件夹名）
+    pub wallpaper_id: String,
+    /// 该壁纸下的 PKG 文件路径列表
+    pub pkg_paths: Vec<PathBuf>,
+}
+
 /// 批量解包入参
 #[derive(Debug, Clone)]
 pub struct UnpackAllInput {
-    /// Pkg 临时目录（存放待解包的 pkg 文件）
-    pub pkg_temp_path: PathBuf,
+    /// PKG 文件来源列表（直接从 Workshop 读取）
+    pub pkg_sources: Vec<PkgSource>,
     /// 解包输出目录
     pub unpacked_output_path: PathBuf,
 }
@@ -128,7 +137,7 @@ pub struct PkgFileEntry {
 
 /// 批量解包 PKG 文件
 ///
-/// 扫描 pkg_temp_path 下所有 .pkg 文件并解包到 unpacked_output_path
+/// 直接从 Workshop 源路径读取 PKG 并解包到 unpacked_output_path
 pub fn unpack_all(input: UnpackAllInput) -> UnpackAllOutput {
     // 确保输出目录存在
     if let Err(e) = path::ensure_dir_compat(&input.unpacked_output_path) {
@@ -140,90 +149,71 @@ pub fn unpack_all(input: UnpackAllInput) -> UnpackAllOutput {
         };
     }
 
-    // 查找所有 PKG 文件
-    let pkg_files = match find_pkg_files(&input.pkg_temp_path) {
-        Ok(files) => files,
-        Err(e) => {
-            return UnpackAllOutput {
-                success: false,
-                results: vec![],
-                stats: UnpackStats::default(),
-                error: Some(e),
-            };
-        }
-    };
-
     let mut results = Vec::new();
     let mut stats = UnpackStats::default();
 
-    for pkg_path in pkg_files {
-        stats.pkg_processed += 1;
+    for source in &input.pkg_sources {
+        let output_dir = input.unpacked_output_path.join(&source.wallpaper_id);
 
-        let pkg_name = pkg_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
+        for pkg_path in &source.pkg_paths {
+            stats.pkg_processed += 1;
 
-        let scene_name = path::scene_name_from_pkg_stem(
-            pkg_path
-                .file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default()
-                .as_str(),
-        );
+            let pkg_name = pkg_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
 
-        let output_dir = input.unpacked_output_path.join(&scene_name);
+            // 执行解包
+            let unpack_result = pkg::unpack_pkg(pkg::UnpackPkgInput {
+                file_path: pkg_path.clone(),
+                output_base: output_dir.clone(),
+            });
 
-        // 执行解包
-        let unpack_result = pkg::unpack_pkg(pkg::UnpackPkgInput {
-            file_path: pkg_path.clone(),
-            output_base: output_dir.clone(),
-        });
+            match unpack_result {
+                Ok(result) => {
+                    stats.pkg_success += 1;
 
-        match unpack_result {
-            Ok(result) => {
-                stats.pkg_success += 1;
+                    let files: Vec<UnpackedFile> = result
+                        .extracted_files
+                        .iter()
+                        .map(|f| {
+                            let is_tex = f.entry_name.to_lowercase().ends_with(".tex");
+                            if is_tex {
+                                stats.tex_files += 1;
+                            }
+                            stats.total_files += 1;
 
-                let files: Vec<UnpackedFile> = result
-                    .extracted_files
-                    .iter()
-                    .map(|f| {
-                        let is_tex = f.entry_name.to_lowercase().ends_with(".tex");
-                        if is_tex {
-                            stats.tex_files += 1;
-                        }
-                        stats.total_files += 1;
+                            UnpackedFile {
+                                name: f.entry_name.clone(),
+                                output_path: f.output_path.clone(),
+                                size: f.size,
+                                is_tex,
+                            }
+                        })
+                        .collect();
 
-                        UnpackedFile {
-                            name: f.entry_name.clone(),
-                            output_path: f.output_path.clone(),
-                            size: f.size,
-                            is_tex,
-                        }
-                    })
-                    .collect();
-
-                results.push(UnpackResult {
-                    pkg_path,
-                    pkg_name,
-                    scene_name,
-                    output_dir,
-                    success: true,
-                    files,
-                    error: None,
-                });
-            }
-            Err(e) => {
-                stats.pkg_failed += 1;
-                results.push(UnpackResult {
-                    pkg_path,
-                    pkg_name,
-                    scene_name,
-                    output_dir,
-                    success: false,
-                    files: vec![],
-                    error: Some(e.to_string()),
-                });
+                    results.push(UnpackResult {
+                        pkg_path: pkg_path.clone(),
+                        pkg_name,
+                        scene_name: source.wallpaper_id.clone(),
+                        output_dir: output_dir.clone(),
+                        success: true,
+                        files,
+                        error: None,
+                    });
+                }
+                Err(e) => {
+                    stats.pkg_failed += 1;
+                    results.push(UnpackResult {
+                        pkg_path: pkg_path.clone(),
+                        pkg_name,
+                        scene_name: source.wallpaper_id.clone(),
+                        output_dir: output_dir.clone(),
+                        success: false,
+                        files: vec![],
+                        error: Some(e.to_string()),
+                    });
+                }
             }
         }
     }
@@ -364,29 +354,3 @@ pub fn get_tex_files_from_unpacked(unpacked_path: &PathBuf) -> Vec<PathBuf> {
 // ============================================================================
 // 内部工具函数
 // ============================================================================
-
-/// 查找目录下所有 PKG 文件
-fn find_pkg_files(dir: &PathBuf) -> Result<Vec<PathBuf>, String> {
-    let mut pkg_files = Vec::new();
-
-    let entries = fs::read_dir(dir)
-        .map_err(|e| format!("Failed to read directory {}: {}", dir.display(), e))?;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_file() {
-            if let Some(ext) = path.extension() {
-                if ext.to_string_lossy().to_lowercase() == "pkg" {
-                    pkg_files.push(path);
-                }
-            }
-        } else if path.is_dir() {
-            // 递归搜索子目录
-            if let Ok(sub_files) = find_pkg_files(&path) {
-                pkg_files.extend(sub_files);
-            }
-        }
-    }
-
-    Ok(pkg_files)
-}

@@ -47,11 +47,6 @@ pub fn run(args: &WallpaperArgs, config_path: Option<PathBuf>) -> Result<(), Str
         .clone()
         .unwrap_or_else(|| config.raw_output_path.clone());
 
-    let pkg_temp = args
-        .pkg_temp
-        .clone()
-        .unwrap_or_else(|| config.pkg_temp_path.clone());
-
     let enable_raw = !args.no_raw && config.enable_raw_output;
 
     // 预览模式
@@ -75,12 +70,10 @@ pub fn run(args: &WallpaperArgs, config_path: Option<PathBuf>) -> Result<(), Str
     }
     out::path_info("Source", &workshop_path);
     out::path_info("Raw Output", &raw_output);
-    out::path_info("PKG Temp", &pkg_temp);
     println!();
 
     // 确保目录存在
     let _ = path::ensure_dir_compat(&raw_output);
-    let _ = path::ensure_dir_compat(&pkg_temp);
 
     out::debug_api_enter(
         "paper",
@@ -96,7 +89,6 @@ pub fn run(args: &WallpaperArgs, config_path: Option<PathBuf>) -> Result<(), Str
         wallpaper_ids: args.ids.clone(),
         workshop_path,
         raw_output_path: raw_output,
-        pkg_temp_path: pkg_temp,
         enable_raw,
     });
 

@@ -46,12 +46,8 @@ pub struct RuntimeConfig {
     pub raw_output_path: PathBuf,
     /// 是否启用原始壁纸输出
     pub enable_raw_output: bool,
-    /// Pkg 临时路径
-    pub pkg_temp_path: PathBuf,
     /// 解包输出路径
     pub unpacked_output_path: PathBuf,
-    /// 是否清理 pkg_temp
-    pub clean_pkg_temp: bool,
     /// 是否清理 unpacked
     pub clean_unpacked: bool,
     /// Tex 转换输出路径（可选）
@@ -349,13 +345,6 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
-    // pkg_temp 已废弃，fallback 到 unpacked 路径下的 .pkg_temp 子目录
-    let pkg_temp_path = wallpaper
-        .get("pkg_temp_path")
-        .and_then(|v| v.as_str())
-        .map(path::expand_path_compat)
-        .unwrap_or_else(|| path::expand_path_compat(&path::default_unpacked_output_path()).join(".pkg_temp"));
-
     // 解析 [unpack] 部分
     let unpack = doc.get("unpack").and_then(|v| v.as_table());
 
@@ -364,11 +353,6 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
         .and_then(|v| v.as_str())
         .map(path::expand_path_compat)
         .unwrap_or_else(|| PathBuf::from(path::default_unpacked_output_path()));
-
-    let clean_pkg_temp = unpack
-        .and_then(|u| u.get("clean_pkg_temp"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
 
     let clean_unpacked = unpack
         .and_then(|u| u.get("clean_unpacked"))
@@ -406,9 +390,7 @@ fn parse_config_toml(content: &str) -> Result<RuntimeConfig, String> {
         workshop_path,
         raw_output_path,
         enable_raw_output,
-        pkg_temp_path,
         unpacked_output_path,
-        clean_pkg_temp,
         clean_unpacked,
         converted_output_path,
         pipeline,

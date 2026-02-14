@@ -69,10 +69,6 @@ pub struct WallpaperArgs {
     #[arg(short = 'r', long = "raw-out", value_name = "PATH")]
     pub raw_output: Option<PathBuf>,
 
-    /// PKG 临时输出路径
-    #[arg(short = 't', long = "pkg-temp", value_name = "PATH")]
-    pub pkg_temp: Option<PathBuf>,
-
     /// 跳过原始壁纸复制（只提取 PKG）
     #[arg(long = "no-raw")]
     pub no_raw: bool,
@@ -148,10 +144,6 @@ pub struct AutoArgs {
     #[arg(short = 'r', long = "raw-out", value_name = "PATH")]
     pub raw_output: Option<PathBuf>,
 
-    /// PKG 临时目录
-    #[arg(short = 't', long = "pkg-temp", value_name = "PATH")]
-    pub pkg_temp: Option<PathBuf>,
-
     /// 解包输出目录
     #[arg(short = 'u', long = "unpacked-out", value_name = "PATH")]
     pub unpacked_output: Option<PathBuf>,
@@ -167,10 +159,6 @@ pub struct AutoArgs {
     /// 跳过 TEX 转换
     #[arg(long = "no-tex")]
     pub no_tex: bool,
-
-    /// 保留 PKG 临时目录
-    #[arg(long = "no-clean-temp")]
-    pub no_clean_temp: bool,
 
     /// 保留解包中间产物
     #[arg(long = "no-clean-unpacked")]

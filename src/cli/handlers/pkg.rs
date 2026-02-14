@@ -41,7 +41,7 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     let input_path = args
         .path
         .clone()
-        .unwrap_or_else(|| config.pkg_temp_path.clone());
+        .unwrap_or_else(|| config.unpacked_output_path.clone());
 
     let output_path = args
         .output
@@ -99,14 +99,63 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
         println!();
         out::success("PKG unpack completed!");
     } else {
-        // 目录批量解包
+        // 目录批量解包：扫描目录下的 PKG 文件，构建 PkgSource
         out::debug_api_enter(
             "pkg",
             "unpack_all",
             &format!("input={}", input_path.display()),
         );
+
+        // 收集目录下所有 .pkg 文件
+        let mut pkg_sources = Vec::new();
+        if let Ok(entries) = fs::read_dir(&input_path) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(ext) = path.extension() {
+                        if ext.to_string_lossy().to_lowercase() == "pkg" {
+                            // 从文件名推导壁纸 ID
+                            let id = path
+                                .file_stem()
+                                .map(|s| s.to_string_lossy().to_string())
+                                .unwrap_or_default();
+                            pkg_sources.push(pkg::PkgSource {
+                                wallpaper_id: id,
+                                pkg_paths: vec![path],
+                            });
+                        }
+                    }
+                } else if path.is_dir() {
+                    // 子目录：以目录名为 wallpaper_id，收集其中的 .pkg 文件
+                    let dir_name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    let mut pkgs = Vec::new();
+                    if let Ok(sub_entries) = fs::read_dir(&path) {
+                        for sub_entry in sub_entries.flatten() {
+                            let sub_path = sub_entry.path();
+                            if sub_path.is_file() {
+                                if let Some(ext) = sub_path.extension() {
+                                    if ext.to_string_lossy().to_lowercase() == "pkg" {
+                                        pkgs.push(sub_path);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !pkgs.is_empty() {
+                        pkg_sources.push(pkg::PkgSource {
+                            wallpaper_id: dir_name,
+                            pkg_paths: pkgs,
+                        });
+                    }
+                }
+            }
+        }
+
         let result = pkg::unpack_all(pkg::UnpackAllInput {
-            pkg_temp_path: input_path,
+            pkg_sources,
             unpacked_output_path: output_path,
         });
 

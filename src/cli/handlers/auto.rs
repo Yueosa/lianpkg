@@ -163,9 +163,6 @@ fn apply_cli_overrides(config: &mut native::RuntimeConfig, args: &AutoArgs) {
     if let Some(ref p) = args.raw_output {
         config.raw_output_path = p.clone();
     }
-    if let Some(ref p) = args.pkg_temp {
-        config.pkg_temp_path = p.clone();
-    }
     if let Some(ref p) = args.unpacked_output {
         config.unpacked_output_path = p.clone();
     }
@@ -174,9 +171,6 @@ fn apply_cli_overrides(config: &mut native::RuntimeConfig, args: &AutoArgs) {
     }
     if args.no_raw {
         config.enable_raw_output = false;
-    }
-    if args.no_clean_temp {
-        config.clean_pkg_temp = false;
     }
     if args.no_clean_unpacked {
         config.clean_unpacked = false;
@@ -193,15 +187,9 @@ fn build_pipeline_overrides(args: &AutoArgs) -> pipeline::PipelineOverrides {
     pipeline::PipelineOverrides {
         workshop_path: args.search.clone(),
         raw_output_path: args.raw_output.clone(),
-        pkg_temp_path: args.pkg_temp.clone(),
         unpacked_output_path: args.unpacked_output.clone(),
         tex_output_path: args.tex_output.clone(),
         enable_raw: if args.no_raw { Some(false) } else { None },
-        clean_pkg_temp: if args.no_clean_temp {
-            Some(false)
-        } else {
-            None
-        },
         clean_unpacked: if args.no_clean_unpacked {
             Some(false)
         } else {
@@ -360,7 +348,6 @@ fn show_config(config: &native::RuntimeConfig) {
     out::subtitle_icon("📁", "Paths");
     out::path_info("Workshop", &config.workshop_path);
     out::path_info("Raw Output", &config.raw_output_path);
-    out::path_info("PKG Temp", &config.pkg_temp_path);
     out::path_info("Unpacked", &config.unpacked_output_path);
     if let Some(ref p) = config.converted_output_path {
         out::path_info("TEX Output", p);
@@ -371,7 +358,6 @@ fn show_config(config: &native::RuntimeConfig) {
     out::option_bool("Auto Unpack PKG", config.pipeline.auto_unpack_pkg);
     out::option_bool("Auto Convert TEX", config.pipeline.auto_convert_tex);
     out::option_bool("Incremental", config.pipeline.incremental);
-    out::option_bool("Clean PKG Temp", config.clean_pkg_temp);
     out::option_bool("Clean Unpacked", config.clean_unpacked);
 }
 
@@ -553,7 +539,7 @@ fn show_execution_plan(config: &native::RuntimeConfig) {
 
     out::step(
         step,
-        &format!("Copy PKG files to {}", config.pkg_temp_path.display()),
+        "Scan PKG files from Workshop (no temp copy)",
     );
     step += 1;
 
@@ -577,11 +563,6 @@ fn show_execution_plan(config: &native::RuntimeConfig) {
                 format!("{}/*/tex_converted", config.unpacked_output_path.display())
             });
         out::step(step, &format!("Convert TEX files to {}", tex_out));
-        step += 1;
-    }
-
-    if config.clean_pkg_temp {
-        out::step(step, "Clean PKG temp directory");
         step += 1;
     }
 

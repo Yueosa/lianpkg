@@ -49,13 +49,18 @@
 //!     wallpaper_ids: None,
 //!     workshop_path: config.workshop_path,
 //!     raw_output_path: config.raw_output_path,
-//!     pkg_temp_path: config.pkg_temp_path.clone(),
 //!     enable_raw: config.enable_raw_output,
 //! });
 //!
-//! // 5. 解包 PKG
+//! // 5. 解包 PKG（直接从 Workshop 读取）
+//! let pkg_sources: Vec<pkg::PkgSource> = copied.results.iter()
+//!     .filter(|r| r.result_type == paper::CopyResultType::Pkg)
+//!     .map(|r| pkg::PkgSource {
+//!         wallpaper_id: r.wallpaper_id.clone(),
+//!         pkg_paths: r.pkg_files.clone(),
+//!     }).collect();
 //! let unpacked = pkg::unpack_all(pkg::UnpackAllInput {
-//!     pkg_temp_path: config.pkg_temp_path,
+//!     pkg_sources,
 //!     unpacked_output_path: config.unpacked_output_path.clone(),
 //! });
 //!
@@ -128,6 +133,7 @@ pub use pkg::{
     unpack_single,
     PkgFileEntry,
     PkgPreview,
+    PkgSource,
     PreviewPkgInput,
     PreviewPkgOutput,
     // 结构体

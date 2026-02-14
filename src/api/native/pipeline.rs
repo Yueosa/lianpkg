@@ -79,16 +79,12 @@ pub struct PipelineOverrides {
     pub workshop_path: Option<PathBuf>,
     /// 覆盖 raw_output_path
     pub raw_output_path: Option<PathBuf>,
-    /// 覆盖 pkg_temp_path
-    pub pkg_temp_path: Option<PathBuf>,
     /// 覆盖 unpacked_output_path
     pub unpacked_output_path: Option<PathBuf>,
     /// 覆盖 converted_output_path
     pub tex_output_path: Option<PathBuf>,
     /// 覆盖 enable_raw_output
     pub enable_raw: Option<bool>,
-    /// 覆盖 clean_pkg_temp
-    pub clean_pkg_temp: Option<bool>,
     /// 覆盖 clean_unpacked
     pub clean_unpacked: Option<bool>,
     /// 覆盖 incremental
@@ -201,8 +197,6 @@ pub struct EstimateDiskOutput {
     pub pkg_count: usize,
     /// 原始壁纸数量
     pub raw_count: usize,
-    /// 预估 PKG 临时目录大小
-    pub estimated_pkg_temp: u64,
     /// 预估解包后大小
     pub estimated_unpacked: u64,
     /// 预估转换后大小
@@ -239,24 +233,19 @@ pub fn estimate_disk_usage(input: EstimateDiskInput) -> EstimateDiskOutput {
     let pkg_size = estimate_result.pkg_size;
     let raw_size = estimate_result.raw_size;
 
-    // 预估各阶段大小
-    // PKG 临时目录 = PKG 文件大小
-    let estimated_pkg_temp = pkg_size;
+    // 预估各阶段大小（PKG 直接从 Workshop 读取，无临时副本）
     // 解包后大小约为 PKG 大小的 1.5 倍（经验值）
     let estimated_unpacked = (pkg_size as f64 * 1.5) as u64;
     // 转换后大小约为 PKG 大小的 2.0 倍（经验值，PNG 比 TEX 大）
     let estimated_converted = (pkg_size as f64 * 2.0) as u64;
 
-    // 峰值使用：所有临时文件同时存在
-    let estimated_peak = estimated_pkg_temp + estimated_unpacked + estimated_converted + raw_size;
+    // 峰值使用：解包产物 + 转换产物 + 原始壁纸
+    let estimated_peak = estimated_unpacked + estimated_converted + raw_size;
 
     // 最终使用：根据清理配置计算
     let mut estimated_final = raw_size + estimated_converted;
     if !config.clean_unpacked {
         estimated_final += estimated_unpacked;
-    }
-    if !config.clean_pkg_temp {
-        estimated_final += estimated_pkg_temp;
     }
 
     // 检查可用空间
@@ -276,7 +265,6 @@ pub fn estimate_disk_usage(input: EstimateDiskInput) -> EstimateDiskOutput {
         raw_size,
         pkg_count: estimate_result.pkg_count,
         raw_count: estimate_result.raw_count,
-        estimated_pkg_temp,
         estimated_unpacked,
         estimated_converted,
         estimated_peak,
@@ -410,7 +398,6 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
         wallpaper_ids: Some(wallpapers_to_process.clone()),
         workshop_path: config.workshop_path.clone(),
         raw_output_path: config.raw_output_path.clone(),
-        pkg_temp_path: config.pkg_temp_path.clone(),
         enable_raw: config.enable_raw_output,
     });
 
@@ -446,20 +433,31 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
     }
 
     // ========== 阶段4: 解包 PKG ==========
-    let pkg_result = if config.pipeline.auto_unpack_pkg && paper_result.stats.pkg_copied > 0 {
+    // 从 paper 结果中收集 PKG 源文件
+    let pkg_sources: Vec<native_pkg::PkgSource> = paper_result
+        .results
+        .iter()
+        .filter(|r| r.result_type == native_paper::CopyResultType::Pkg)
+        .map(|r| native_pkg::PkgSource {
+            wallpaper_id: r.wallpaper_id.clone(),
+            pkg_paths: r.pkg_files.clone(),
+        })
+        .collect();
+
+    let pkg_result = if config.pipeline.auto_unpack_pkg && !pkg_sources.is_empty() {
         report_progress(PipelineStage::Unpacking, 50, None, "Unpacking PKG files...");
         debug_log(
             DebugLogType::Enter,
             "pkg",
             "unpack_all",
             &format!(
-                "input={}, output={}",
-                config.pkg_temp_path.display(),
+                "sources={}, output={}",
+                pkg_sources.len(),
                 config.unpacked_output_path.display()
             ),
         );
         let result = native_pkg::unpack_all(native_pkg::UnpackAllInput {
-            pkg_temp_path: config.pkg_temp_path.clone(),
+            pkg_sources,
             unpacked_output_path: config.unpacked_output_path.clone(),
         });
         debug_log(
@@ -588,18 +586,6 @@ pub fn run_pipeline(input: RunPipelineInput) -> RunPipelineOutput {
     // ========== 阶段6: 清理 ==========
     report_progress(PipelineStage::Cleanup, 90, None, "Cleaning up...");
 
-    // 清理 pkg_temp 目录
-    if config.clean_pkg_temp {
-        debug_log(
-            DebugLogType::Enter,
-            "pipeline",
-            "clean_pkg_temp",
-            &config.pkg_temp_path.display().to_string(),
-        );
-        let _ = std::fs::remove_dir_all(&config.pkg_temp_path);
-        debug_log(DebugLogType::Return, "pipeline", "clean_pkg_temp", "done");
-    }
-
     // 清理 unpacked 目录（保留 tex_converted）
     if config.clean_unpacked {
         debug_log(
@@ -691,11 +677,11 @@ pub fn quick_run(input: QuickRunInput) -> QuickRunOutput {
 
 /// 仅执行 PKG 解包阶段
 pub fn run_pkg_only(
-    pkg_temp_path: PathBuf,
+    pkg_sources: Vec<native_pkg::PkgSource>,
     unpacked_output_path: PathBuf,
 ) -> native_pkg::UnpackAllOutput {
     native_pkg::unpack_all(native_pkg::UnpackAllInput {
-        pkg_temp_path,
+        pkg_sources,
         unpacked_output_path,
     })
 }
@@ -723,9 +709,6 @@ fn apply_overrides(config: &mut native_cfg::RuntimeConfig, overrides: &PipelineO
     if let Some(ref p) = overrides.raw_output_path {
         config.raw_output_path = p.clone();
     }
-    if let Some(ref p) = overrides.pkg_temp_path {
-        config.pkg_temp_path = p.clone();
-    }
     if let Some(ref p) = overrides.unpacked_output_path {
         config.unpacked_output_path = p.clone();
     }
@@ -734,9 +717,6 @@ fn apply_overrides(config: &mut native_cfg::RuntimeConfig, overrides: &PipelineO
     }
     if let Some(enable) = overrides.enable_raw {
         config.enable_raw_output = enable;
-    }
-    if let Some(clean) = overrides.clean_pkg_temp {
-        config.clean_pkg_temp = clean;
     }
     if let Some(clean) = overrides.clean_unpacked {
         config.clean_unpacked = clean;

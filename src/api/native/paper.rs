@@ -70,8 +70,6 @@ pub struct CopyWallpapersInput {
     pub workshop_path: PathBuf,
     /// 原始壁纸输出路径
     pub raw_output_path: PathBuf,
-    /// Pkg 临时输出路径
-    pub pkg_temp_path: PathBuf,
     /// 是否复制原始壁纸
     pub enable_raw: bool,
 }
@@ -236,7 +234,6 @@ pub fn copy_wallpapers(input: CopyWallpapersInput) -> CopyWallpapersOutput {
         let process_result = paper::process_folder(paper::ProcessFolderInput {
             folder: wallpaper.folder_path.clone(),
             raw_output: input.raw_output_path.clone(),
-            pkg_temp_output: input.pkg_temp_path.clone(),
             enable_raw: input.enable_raw,
         });
 

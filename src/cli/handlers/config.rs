@@ -55,14 +55,12 @@ fn show_config(config_path: &std::path::Path) -> Result<(), String> {
         out::stat("workshop_path", config.workshop_path.display());
         out::stat("raw_output_path", config.raw_output_path.display());
         out::stat("enable_raw_output", config.enable_raw_output);
-        out::stat("pkg_temp_path", config.pkg_temp_path.display());
 
         out::subtitle("[unpack]");
         out::stat(
             "unpacked_output_path",
             config.unpacked_output_path.display(),
         );
-        out::stat("clean_pkg_temp", config.clean_pkg_temp);
         out::stat("clean_unpacked", config.clean_unpacked);
 
         out::subtitle("[tex]");

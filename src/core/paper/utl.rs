@@ -3,7 +3,20 @@
 use std::fs;
 use std::path::Path;
 
-/// 递归复制目录
+/// 复制单个文件，Linux 优先 hard_link（零额外空间），失败时 fallback copy。
+/// Windows 直接 copy。
+pub(crate) fn link_or_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        std::fs::hard_link(src, dst).or_else(|_| std::fs::copy(src, dst).map(|_| ()))
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::copy(src, dst).map(|_| ())
+    }
+}
+
+/// 递归复制目录（文件使用 link_or_copy）
 pub(crate) fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     if !dst.exists() {
         fs::create_dir_all(dst)?;
@@ -17,7 +30,7 @@ pub(crate) fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> 
         if file_type.is_dir() {
             copy_dir_recursive(&entry.path(), &dest_path)?;
         } else {
-            fs::copy(entry.path(), dest_path)?;
+            link_or_copy(&entry.path(), &dest_path)?;
         }
     }
     Ok(())
