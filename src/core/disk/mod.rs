@@ -3,6 +3,7 @@
 //! 提供磁盘空间查询的原子接口：
 //! - check_space: 检查指定路径的磁盘可用空间
 //! - find_existing_parent: 查找存在的父目录
+//! - get_dir_size: 递归计算目录大小
 
 mod space;
 mod structs;
@@ -18,3 +19,4 @@ pub use structs::CheckSpaceOutput;
 // ============================================================================
 pub use space::check_space;
 pub use space::find_existing_parent;
+pub use space::get_dir_size;
