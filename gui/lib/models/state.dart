@@ -114,7 +114,8 @@ class DiskUsage {
     );
   }
 
-  int get totalOutputSize => rawOutputSize + unpackedOutputSize + convertedOutputSize;
+  int get totalOutputSize =>
+      rawOutputSize + unpackedOutputSize + convertedOutputSize;
 
   /// 格式化字节为可读字符串
   static String formatBytes(int bytes) {
