@@ -18,10 +18,7 @@ pub fn parse_tex(input: ParseTexInput) -> CoreResult<ParseTexOutput> {
     })?;
 
     // 读取 TEX 结构
-    let tex_file = reader::read_tex(&mut file).map_err(|e| CoreError::Parse {
-        message: e.to_string(),
-        source: Some(file_path.display().to_string()),
-    })?;
+    let tex_file = reader::read_tex(&mut file)?;
 
     // 提取信息
     let first_image = tex_file.images.first();

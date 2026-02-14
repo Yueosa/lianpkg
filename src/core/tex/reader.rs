@@ -1,19 +1,20 @@
 //! TEX 文件二进制读取器（内部使用）
 
-use std::io::{self, Read, Seek};
+use std::io::{Read, Seek};
 use byteorder::{ReadBytesExt, LittleEndian};
+use crate::core::error::{CoreError, CoreResult};
 use crate::core::tex::structs::*;
 
 /// 读取 TEX 文件结构
-pub(crate) fn read_tex<R: Read + Seek>(mut reader: R) -> io::Result<TexFile> {
-    let magic1 = read_n_string(&mut reader, 16)?;
+pub(crate) fn read_tex<R: Read + Seek>(mut reader: R) -> CoreResult<TexFile> {
+    let magic1 = read_fixed_string(&mut reader, 16)?;
     if magic1 != "TEXV0005" {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Invalid Magic1: {}", magic1)));
+        return Err(CoreError::invalid_data(format!("Invalid Magic1: '{}'", magic1)));
     }
 
-    let magic2 = read_n_string(&mut reader, 16)?;
+    let magic2 = read_fixed_string(&mut reader, 16)?;
     if magic2 != "TEXI0001" {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Invalid Magic2: {}", magic2)));
+        return Err(CoreError::invalid_data(format!("Invalid Magic2: '{}'", magic2)));
     }
 
     let header = read_header(&mut reader)?;
@@ -25,14 +26,14 @@ pub(crate) fn read_tex<R: Read + Seek>(mut reader: R) -> io::Result<TexFile> {
     })
 }
 
-fn read_header<R: Read + Seek>(reader: &mut R) -> io::Result<TexHeader> {
-    let format = reader.read_u32::<LittleEndian>()?;
-    let flags = reader.read_u32::<LittleEndian>()?;
-    let texture_width = reader.read_u32::<LittleEndian>()?;
-    let texture_height = reader.read_u32::<LittleEndian>()?;
-    let image_width = reader.read_u32::<LittleEndian>()?;
-    let image_height = reader.read_u32::<LittleEndian>()?;
-    let unk_int0 = reader.read_u32::<LittleEndian>()?;
+fn read_header<R: Read + Seek>(reader: &mut R) -> CoreResult<TexHeader> {
+    let format = reader.read_u32::<LittleEndian>().map_err(read_err)?;
+    let flags = reader.read_u32::<LittleEndian>().map_err(read_err)?;
+    let texture_width = reader.read_u32::<LittleEndian>().map_err(read_err)?;
+    let texture_height = reader.read_u32::<LittleEndian>().map_err(read_err)?;
+    let image_width = reader.read_u32::<LittleEndian>().map_err(read_err)?;
+    let image_height = reader.read_u32::<LittleEndian>().map_err(read_err)?;
+    let unk_int0 = reader.read_u32::<LittleEndian>().map_err(read_err)?;
 
     Ok(TexHeader {
         format,
@@ -45,9 +46,16 @@ fn read_header<R: Read + Seek>(reader: &mut R) -> io::Result<TexHeader> {
     })
 }
 
-fn read_image_container<R: Read + Seek>(reader: &mut R, _header: &TexHeader) -> io::Result<Vec<TexImage>> {
-    let magic = read_n_string(reader, 16)?;
-    let image_count = reader.read_i32::<LittleEndian>()?;
+fn read_image_container<R: Read + Seek>(reader: &mut R, _header: &TexHeader) -> CoreResult<Vec<TexImage>> {
+    let magic = read_fixed_string(reader, 16)?;
+    let image_count = reader.read_i32::<LittleEndian>().map_err(read_err)?;
+
+    // 合理性检查
+    if image_count < 0 || image_count > 1000 {
+        return Err(CoreError::invalid_data(format!(
+            "image_count {} out of valid range [0, 1000]", image_count
+        )));
+    }
 
     let mut image_format: i32 = -1; // Default to FIF_UNKNOWN
     let mut is_video_mp4 = false;
@@ -62,13 +70,13 @@ fn read_image_container<R: Read + Seek>(reader: &mut R, _header: &TexHeader) -> 
     match magic.as_str() {
         "TEXB0001" | "TEXB0002" => {},
         "TEXB0003" => {
-            image_format = reader.read_i32::<LittleEndian>()?;
+            image_format = reader.read_i32::<LittleEndian>().map_err(read_err)?;
         },
         "TEXB0004" => {
-            image_format = reader.read_i32::<LittleEndian>()?;
-            is_video_mp4 = reader.read_i32::<LittleEndian>()? == 1;
+            image_format = reader.read_i32::<LittleEndian>().map_err(read_err)?;
+            is_video_mp4 = reader.read_i32::<LittleEndian>().map_err(read_err)? == 1;
         },
-        _ => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Unknown ImageContainer Magic: {}", magic))),
+        _ => return Err(CoreError::invalid_data(format!("Unknown ImageContainer Magic: '{}'", magic))),
     }
 
     let effective_version = if version == 4 && !is_video_mp4 { 3 } else { version };
@@ -81,8 +89,16 @@ fn read_image_container<R: Read + Seek>(reader: &mut R, _header: &TexHeader) -> 
     Ok(images)
 }
 
-fn read_image<R: Read + Seek>(reader: &mut R, version: i32, image_format: i32, is_video_mp4: bool) -> io::Result<TexImage> {
-    let mipmap_count = reader.read_i32::<LittleEndian>()?;
+fn read_image<R: Read + Seek>(reader: &mut R, version: i32, image_format: i32, is_video_mp4: bool) -> CoreResult<TexImage> {
+    let mipmap_count = reader.read_i32::<LittleEndian>().map_err(read_err)?;
+
+    // 合理性检查
+    if mipmap_count < 0 || mipmap_count > 100 {
+        return Err(CoreError::invalid_data(format!(
+            "mipmap_count {} out of valid range [0, 100]", mipmap_count
+        )));
+    }
+
     let mut mipmaps = Vec::new();
 
     for _ in 0..mipmap_count {
@@ -96,32 +112,43 @@ fn read_image<R: Read + Seek>(reader: &mut R, version: i32, image_format: i32, i
     })
 }
 
-fn read_mipmap<R: Read + Seek>(reader: &mut R, version: i32) -> io::Result<TexMipmap> {
+fn read_mipmap<R: Read + Seek>(reader: &mut R, version: i32) -> CoreResult<TexMipmap> {
     if version == 4 {
         // V4 specific fields
-        let _param1 = reader.read_i32::<LittleEndian>()?;
-        let _param2 = reader.read_i32::<LittleEndian>()?;
-        let _condition_json = read_n_string(reader, 0)?;
-        let _param3 = reader.read_i32::<LittleEndian>()?;
+        let _param1 = reader.read_i32::<LittleEndian>().map_err(read_err)?;
+        let _param2 = reader.read_i32::<LittleEndian>().map_err(read_err)?;
+        let _condition_json = read_null_terminated_string(reader, 4096)?;
+        let _param3 = reader.read_i32::<LittleEndian>().map_err(read_err)?;
     }
 
-    // Common fields for V2, V3, V4 (after V4 header)
-    // V1 is different.
-
-    let width = reader.read_u32::<LittleEndian>()?;
-    let height = reader.read_u32::<LittleEndian>()?;
+    let width = reader.read_u32::<LittleEndian>().map_err(read_err)?;
+    let height = reader.read_u32::<LittleEndian>().map_err(read_err)?;
 
     let mut is_lz4_compressed = false;
     let mut decompressed_bytes_count = 0;
 
     if version >= 2 {
-        is_lz4_compressed = reader.read_i32::<LittleEndian>()? == 1;
-        decompressed_bytes_count = reader.read_u32::<LittleEndian>()?;
+        is_lz4_compressed = reader.read_i32::<LittleEndian>().map_err(read_err)? == 1;
+        decompressed_bytes_count = reader.read_u32::<LittleEndian>().map_err(read_err)?;
     }
 
-    let byte_count = reader.read_i32::<LittleEndian>()?;
+    let byte_count = reader.read_i32::<LittleEndian>().map_err(read_err)?;
+
+    // 合理性检查
+    if byte_count < 0 {
+        return Err(CoreError::invalid_data(format!(
+            "mipmap byte_count {} is negative", byte_count
+        )));
+    }
+    // 防止恶意文件触发巨量分配（512 MB 上限）
+    if byte_count as u64 > 512 * 1024 * 1024 {
+        return Err(CoreError::invalid_data(format!(
+            "mipmap byte_count {} exceeds 512 MB limit", byte_count
+        )));
+    }
+
     let mut data = vec![0u8; byte_count as usize];
-    reader.read_exact(&mut data)?;
+    reader.read_exact(&mut data).map_err(read_err)?;
 
     Ok(TexMipmap {
         width,
@@ -132,20 +159,46 @@ fn read_mipmap<R: Read + Seek>(reader: &mut R, version: i32) -> io::Result<TexMi
     })
 }
 
-fn read_n_string<R: Read + Seek>(reader: &mut R, max_length: usize) -> io::Result<String> {
+/// 读取固定长度字段：精确消费 `field_size` 字节，在已读字节中找第一个 `\0` 截取字符串。
+///
+/// 消除旧 `read_n_string` 不消费 padding 导致偏移错位的问题。
+fn read_fixed_string<R: Read>(reader: &mut R, field_size: usize) -> CoreResult<String> {
+    let mut buf = vec![0u8; field_size];
+    reader.read_exact(&mut buf).map_err(read_err)?;
+
+    // 找第一个 \0，截取前面部分
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(field_size);
+    String::from_utf8(buf[..end].to_vec()).map_err(|e| {
+        CoreError::invalid_data(format!("read_fixed_string: invalid UTF-8: {}", e))
+    })
+}
+
+/// 读取 null-terminated 字符串（变长），带安全上限。
+///
+/// 用于 V4 mipmap 的 condition_json 等变长字段。
+fn read_null_terminated_string<R: Read>(reader: &mut R, max_bytes: usize) -> CoreResult<String> {
     let mut bytes = Vec::new();
     let mut c = [0u8; 1];
-    
+
     loop {
-        reader.read_exact(&mut c)?;
+        reader.read_exact(&mut c).map_err(read_err)?;
         if c[0] == 0 {
             break;
         }
         bytes.push(c[0]);
-        if max_length > 0 && bytes.len() >= max_length {
-            break;
+        if bytes.len() >= max_bytes {
+            return Err(CoreError::invalid_data(format!(
+                "null-terminated string exceeds {} byte limit", max_bytes
+            )));
         }
     }
 
-    Ok(String::from_utf8_lossy(&bytes).to_string())
+    String::from_utf8(bytes).map_err(|e| {
+        CoreError::invalid_data(format!("read_null_terminated_string: invalid UTF-8: {}", e))
+    })
+}
+
+/// 将 `io::Error` 转换为 `CoreError::InvalidData`
+fn read_err(e: std::io::Error) -> CoreError {
+    CoreError::invalid_data(format!("TEX read error: {}", e))
 }

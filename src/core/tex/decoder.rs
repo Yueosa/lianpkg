@@ -1,6 +1,7 @@
 //! 格式解码器（内部使用）
 
 use texture2ddecoder::{decode_bc1, decode_bc2, decode_bc3};
+use crate::core::error::{CoreError, CoreResult};
 use crate::core::tex::structs::{TexFile, TexImage, MipmapFormat};
 
 /// 确定 Mipmap 格式
@@ -76,24 +77,24 @@ fn free_image_format_to_mipmap_format(fif: i32) -> MipmapFormat {
 }
 
 /// 解码 Mipmap 数据为 RGBA
-pub(crate) fn decode_mipmap(data: &[u8], width: usize, height: usize, format: MipmapFormat) -> Result<Vec<u8>, String> {
+pub(crate) fn decode_mipmap(data: &[u8], width: usize, height: usize, format: MipmapFormat) -> CoreResult<Vec<u8>> {
     match format {
         MipmapFormat::CompressedDXT1 => {
             let mut pixels = vec![0u32; width * height];
             decode_bc1(data, width, height, &mut pixels)
-                .map_err(|e| format!("DXT1 decode failed: {}", e))?;
+                .map_err(|e| CoreError::invalid_data(format!("DXT1 decode failed: {}", e)))?;
             Ok(pixels.iter().flat_map(|&p| p.to_le_bytes()).collect())
         }
         MipmapFormat::CompressedDXT3 => {
             let mut pixels = vec![0u32; width * height];
             decode_bc2(data, width, height, &mut pixels)
-                .map_err(|e| format!("DXT3 decode failed: {}", e))?;
+                .map_err(|e| CoreError::invalid_data(format!("DXT3 decode failed: {}", e)))?;
             Ok(pixels.iter().flat_map(|&p| p.to_le_bytes()).collect())
         }
         MipmapFormat::CompressedDXT5 => {
             let mut pixels = vec![0u32; width * height];
             decode_bc3(data, width, height, &mut pixels)
-                .map_err(|e| format!("DXT5 decode failed: {}", e))?;
+                .map_err(|e| CoreError::invalid_data(format!("DXT5 decode failed: {}", e)))?;
             Ok(pixels.iter().flat_map(|&p| p.to_le_bytes()).collect())
         }
         MipmapFormat::RGBA8888 => {
@@ -124,7 +125,7 @@ pub(crate) fn decode_mipmap(data: &[u8], width: usize, height: usize, format: Mi
             Ok(new_data)
         }
         _ => {
-            Err(format!("Unsupported format for decoding: {:?}", format))
+            Err(CoreError::invalid_data(format!("Unsupported format for decoding: {:?}", format)))
         }
     }
 }

@@ -25,10 +25,7 @@ pub fn convert_tex(input: ConvertTexInput) -> CoreResult<ConvertTexOutput> {
     })?;
 
     // 读取 TEX 结构
-    let tex_file = reader::read_tex(&mut file).map_err(|e| CoreError::Parse {
-        message: e.to_string(),
-        source: Some(file_path.display().to_string()),
-    })?;
+    let tex_file = reader::read_tex(&mut file)?;
 
     // 获取第一个图像和 mipmap
     let first_image = tex_file
@@ -108,10 +105,10 @@ pub fn convert_tex(input: ConvertTexInput) -> CoreResult<ConvertTexOutput> {
     let result = match format {
         MipmapFormat::VideoMp4 => save_raw_data(&final_output_path, &data),
         f if f.is_image() => save_raw_data(&final_output_path, &data),
-        _ => match decode_mipmap(&data, width as usize, height as usize, format) {
-            Ok(decoded) => save_as_png(&final_output_path, &decoded, width, height),
-            Err(e) => Err(e),
-        },
+        _ => {
+            let decoded = decode_mipmap(&data, width as usize, height as usize, format)?;
+            save_as_png(&final_output_path, &decoded, width, height)
+        }
     };
 
     result.map_err(|e| CoreError::Io {
