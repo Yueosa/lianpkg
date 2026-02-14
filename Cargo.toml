@@ -21,7 +21,7 @@ unicode-width = "0.2"
 [lib]
 name = "lianpkg"
 path = "src/lib.rs"
-crate-type = ["rlib"]
+crate-type = ["rlib", "cdylib"]
 
 [[bin]]
 name = "lianpkg"
