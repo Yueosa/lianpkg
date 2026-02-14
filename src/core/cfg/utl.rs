@@ -56,20 +56,24 @@ enable_raw_output = {enable_raw}
 
 
 [unpack]
-# === 解包后的文件输出路径 ===
-#     这是 .pkg 文件第一次解包后的产物路径(不是最终产物), 如果需要你需要保留可以在下面配置 clean_unpacked = false
+# === PKG 解包的基础路径 ===
+#     PKG 解包产物会放在: <此路径>/<壁纸ID>/unpacked/
+#     TEX 转换产物会放在: <此路径>/<壁纸ID>/tex_converted/
 #         - Windows 默认: .\\Pkg_Unpacked
 #         - Linux 默认: ~/.local/share/lianpkg/Pkg_Unpacked
 unpacked_output_path = "{unpack_out}"
 
-# === 是否在结束时清理 Pkg_Unpacked 中除 tex_converted 以外的内容 ===
+# === 是否在结束时清理 unpacked 子目录 ===
+#     启用后，流水线完成后会自动删除每个壁纸目录下的 unpacked/ 子目录
+#     仅保留 tex_converted/ 目录（最终产物）
+#     Default/默认: false
 clean_unpacked = {clean_unpacked}
 
 
 [tex]
-# === .tex 转换后的图片输出路径 (输出 3) ===
-#     这是最终产物的目录, 可以不配置, 也可以配置到指定路径
-#     如果留空，则默认在解包路径下的 tex_converted 子目录中
+# === TEX 转换后的图片/视频输出路径 ===
+#     若不配置，默认输出到: <unpacked_output_path>/<壁纸ID>/tex_converted/
+#     若配置了自定义路径，所有转换结果会扁平存放在指定目录中
 # converted_output_path = "{converted_hint}"
 
 
