@@ -2,6 +2,7 @@
 
 use super::types::*;
 use crate::api::native::{auto, context, pkg, scan, tex};
+use crate::core::cfg::{self, ProcessType};
 use std::path::PathBuf;
 
 /// 分发请求到对应的处理函数
@@ -10,13 +11,27 @@ pub fn dispatch(request: FfiRequest) -> FfiResponse {
         "init" => handle_init(request.params),
         "scan" => handle_scan(request.params),
         "auto" => handle_auto(request.params),
+        "progress" => handle_progress(),
         "pkg_unpack" => handle_pkg_unpack(request.params),
+        "pkg_preview" => handle_pkg_preview(request.params),
         "tex_convert" => handle_tex_convert(request.params),
+        "tex_preview" => handle_tex_preview(request.params),
         "config_get" => handle_config_get(),
         "config_set" => handle_config_set(request.params),
+        "config_reset" => handle_config_reset(),
+        "state_get" => handle_state_get(),
+        "state_clear" => handle_state_clear(),
         "status" => handle_status(),
         _ => FfiResponse::error(format!("Unknown action: {}", request.action)),
     }
+}
+
+// ============================================================================
+// 辅助：获取上下文
+// ============================================================================
+
+fn get_ctx() -> Result<context::AppContext, FfiResponse> {
+    context::init(None).map_err(|e| FfiResponse::error(format!("Failed to init context: {}", e)))
 }
 
 // ============================================================================
@@ -30,7 +45,7 @@ fn handle_init(params: serde_json::Value) -> FfiResponse {
     };
 
     let config_dir = params.config_dir.map(PathBuf::from);
-    
+
     match context::init(config_dir) {
         Ok(ctx) => FfiResponse::success(&ctx),
         Err(e) => FfiResponse::error(e.to_string()),
@@ -43,10 +58,9 @@ fn handle_scan(params: serde_json::Value) -> FfiResponse {
         Err(e) => return FfiResponse::error(format!("Invalid params for scan: {}", e)),
     };
 
-    // 需要先初始化 context 获取配置
-    let ctx = match context::init(None) {
+    let ctx = match get_ctx() {
         Ok(c) => c,
-        Err(e) => return FfiResponse::error(format!("Failed to init context: {}", e)),
+        Err(r) => return r,
     };
 
     let workshop_path = params
@@ -54,7 +68,6 @@ fn handle_scan(params: serde_json::Value) -> FfiResponse {
         .map(PathBuf::from)
         .unwrap_or(ctx.config.workshop_path.clone());
 
-    // 加载状态（用于增量处理）
     let state = context::load_state_or_default(&ctx.state_path);
 
     match scan::scan_workshop(&workshop_path, Some(&state)) {
@@ -69,20 +82,59 @@ fn handle_auto(params: serde_json::Value) -> FfiResponse {
         Err(e) => return FfiResponse::error(format!("Invalid params for auto: {}", e)),
     };
 
-    let ctx = match context::init(None) {
+    let mut ctx = match get_ctx() {
         Ok(c) => c,
-        Err(e) => return FfiResponse::error(format!("Failed to init context: {}", e)),
+        Err(r) => return r,
+    };
+
+    // 应用 FFI 参数覆盖
+    if params.no_raw {
+        ctx.config.enable_raw_output = false;
+    }
+    if params.no_tex {
+        ctx.config.pipeline.auto_convert_tex = false;
+    }
+    if params.no_clean_unpacked {
+        ctx.config.clean_unpacked = false;
+    }
+    if params.no_incremental {
+        ctx.config.pipeline.incremental = false;
+    }
+
+    // 设置进度回调，将进度写入全局状态
+    PROGRESS.reset();
+    PROGRESS.start();
+
+    let progress_cb = |p: auto::AutoProgress| {
+        let stage = match p.stage {
+            auto::AutoStage::Init => "init",
+            auto::AutoStage::Scanning => "scanning",
+            auto::AutoStage::Copying => "copying",
+            auto::AutoStage::Unpacking => "unpacking",
+            auto::AutoStage::Converting => "converting",
+            auto::AutoStage::Cleanup => "cleanup",
+            auto::AutoStage::Done => "done",
+        };
+        PROGRESS.update(stage, p.progress, &p.message, p.current_item);
     };
 
     let options = auto::AutoOptions {
         wallpaper_ids: params.wallpaper_ids,
-        progress: None, // FFI 暂不支持进度回调
+        progress: Some(&progress_cb),
     };
 
-    match auto::run_auto(&ctx, options) {
-        Ok(result) => FfiResponse::success(&result),
+    let result = auto::run_auto(&ctx, options);
+
+    PROGRESS.finish();
+
+    match result {
+        Ok(output) => FfiResponse::success(&output),
         Err(e) => FfiResponse::error(e.to_string()),
     }
+}
+
+fn handle_progress() -> FfiResponse {
+    FfiResponse::success(&PROGRESS.snapshot())
 }
 
 fn handle_pkg_unpack(params: serde_json::Value) -> FfiResponse {
@@ -108,6 +160,20 @@ fn handle_pkg_unpack(params: serde_json::Value) -> FfiResponse {
     }
 }
 
+fn handle_pkg_preview(params: serde_json::Value) -> FfiResponse {
+    let params: PkgPreviewParams = match serde_json::from_value(params) {
+        Ok(p) => p,
+        Err(e) => return FfiResponse::error(format!("Invalid params for pkg_preview: {}", e)),
+    };
+
+    let path = PathBuf::from(params.path);
+
+    match pkg::preview_pkg(&path) {
+        Ok(result) => FfiResponse::success(&result),
+        Err(e) => FfiResponse::error(e.to_string()),
+    }
+}
+
 fn handle_tex_convert(params: serde_json::Value) -> FfiResponse {
     let params: TexConvertParams = match serde_json::from_value(params) {
         Ok(p) => p,
@@ -117,13 +183,10 @@ fn handle_tex_convert(params: serde_json::Value) -> FfiResponse {
     let input = PathBuf::from(params.input);
     let output = match params.output {
         Some(ref s) => PathBuf::from(s),
-        None => {
-            // 使用配置中的默认 converted_output_path
-            match context::init(None) {
-                Ok(ctx) => ctx.config.converted_output_path.clone(),
-                Err(e) => return FfiResponse::error(format!("No output specified and failed to load config: {}", e)),
-            }
-        }
+        None => match get_ctx() {
+            Ok(ctx) => ctx.config.converted_output_path.clone(),
+            Err(r) => return r,
+        },
     };
 
     match tex::convert_all(&input, &output) {
@@ -132,13 +195,25 @@ fn handle_tex_convert(params: serde_json::Value) -> FfiResponse {
     }
 }
 
-fn handle_config_get() -> FfiResponse {
-    let ctx = match context::init(None) {
-        Ok(c) => c,
-        Err(e) => return FfiResponse::error(format!("Failed to init context: {}", e)),
+fn handle_tex_preview(params: serde_json::Value) -> FfiResponse {
+    let params: TexPreviewParams = match serde_json::from_value(params) {
+        Ok(p) => p,
+        Err(e) => return FfiResponse::error(format!("Invalid params for tex_preview: {}", e)),
     };
 
-    FfiResponse::success(&ctx.config)
+    let path = PathBuf::from(params.path);
+
+    match tex::preview_tex(&path) {
+        Ok(result) => FfiResponse::success(&result),
+        Err(e) => FfiResponse::error(e.to_string()),
+    }
+}
+
+fn handle_config_get() -> FfiResponse {
+    match get_ctx() {
+        Ok(ctx) => FfiResponse::success(&ctx.config),
+        Err(r) => r,
+    }
 }
 
 fn handle_config_set(params: serde_json::Value) -> FfiResponse {
@@ -147,13 +222,11 @@ fn handle_config_set(params: serde_json::Value) -> FfiResponse {
         Err(e) => return FfiResponse::error(format!("Invalid params for config_set: {}", e)),
     };
 
-    let ctx = match context::init(None) {
+    let ctx = match get_ctx() {
         Ok(c) => c,
-        Err(e) => return FfiResponse::error(format!("Failed to init context: {}", e)),
+        Err(r) => return r,
     };
 
-    // 使用 cfg API 更新配置
-    use crate::core::cfg;
     match cfg::update_config_toml(cfg::UpdateConfigInput {
         path: ctx.config_path,
         key: params.key,
@@ -164,12 +237,84 @@ fn handle_config_set(params: serde_json::Value) -> FfiResponse {
     }
 }
 
-fn handle_status() -> FfiResponse {
-    let ctx = match context::init(None) {
+fn handle_config_reset() -> FfiResponse {
+    let ctx = match get_ctx() {
         Ok(c) => c,
-        Err(e) => return FfiResponse::error(format!("Failed to init context: {}", e)),
+        Err(r) => return r,
+    };
+
+    // 删除后重建
+    let _ = cfg::delete_config_toml(cfg::DeleteConfigInput {
+        path: ctx.config_path.clone(),
+    });
+
+    match cfg::create_config_toml(cfg::CreateConfigInput {
+        path: ctx.config_path,
+        content: None,
+    }) {
+        Ok(_) => FfiResponse::success(&serde_json::json!({})),
+        Err(e) => FfiResponse::error(e.to_string()),
+    }
+}
+
+fn handle_state_get() -> FfiResponse {
+    let ctx = match get_ctx() {
+        Ok(c) => c,
+        Err(r) => return r,
     };
 
     let state = context::load_state_or_default(&ctx.state_path);
     FfiResponse::success(&state)
+}
+
+fn handle_state_clear() -> FfiResponse {
+    let ctx = match get_ctx() {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
+
+    match cfg::delete_state_json(cfg::DeleteStateInput {
+        path: ctx.state_path.clone(),
+    }) {
+        Ok(_) => {
+            // 重建空状态
+            let _ = cfg::create_state_json(cfg::CreateStateInput {
+                path: ctx.state_path,
+                content: None,
+            });
+            FfiResponse::success(&serde_json::json!({}))
+        }
+        Err(e) => FfiResponse::error(e.to_string()),
+    }
+}
+
+fn handle_status() -> FfiResponse {
+    let ctx = match get_ctx() {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
+
+    let state = context::load_state_or_default(&ctx.state_path);
+    let estimate = auto::estimate_disk_usage(&ctx.config);
+
+    // 统计各类型数量
+    let mut pkg_count = 0usize;
+    let mut raw_count = 0usize;
+    let mut skipped_count = 0usize;
+    for info in state.processed.values() {
+        match info.process_type {
+            ProcessType::Pkg | ProcessType::PkgTex => pkg_count += 1,
+            ProcessType::Raw => raw_count += 1,
+            ProcessType::Skipped => skipped_count += 1,
+        }
+    }
+
+    FfiResponse::success(&serde_json::json!({
+        "total_processed": state.processed.len(),
+        "pkg_count": pkg_count,
+        "raw_count": raw_count,
+        "skipped_count": skipped_count,
+        "last_run": state.last_run,
+        "disk_estimate": estimate,
+    }))
 }

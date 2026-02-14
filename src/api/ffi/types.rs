@@ -1,6 +1,8 @@
-//! FFI 类型定义 - 请求/响应结构
+//! FFI 类型定义 - 请求/响应结构 + 进度状态
 
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::Mutex;
 
 // ============================================================================
 // 通用请求/响应
@@ -17,7 +19,7 @@ pub struct FfiRequest {
 }
 
 /// FFI 响应
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FfiResponse {
     /// 是否成功
     pub success: bool,
@@ -50,38 +52,110 @@ impl FfiResponse {
 }
 
 // ============================================================================
+// 进度状态（全局共享，用于轮询）
+// ============================================================================
+
+/// 全局进度状态
+pub static PROGRESS: GlobalProgress = GlobalProgress::new();
+
+pub struct GlobalProgress {
+    pub running: AtomicBool,
+    pub percent: AtomicU8,
+    pub stage: Mutex<String>,
+    pub message: Mutex<String>,
+    pub current_item: Mutex<Option<String>>,
+}
+
+impl GlobalProgress {
+    const fn new() -> Self {
+        Self {
+            running: AtomicBool::new(false),
+            percent: AtomicU8::new(0),
+            stage: Mutex::new(String::new()),
+            message: Mutex::new(String::new()),
+            current_item: Mutex::new(None),
+        }
+    }
+
+    pub fn reset(&self) {
+        self.running.store(false, Ordering::Relaxed);
+        self.percent.store(0, Ordering::Relaxed);
+        *self.stage.lock().unwrap() = String::new();
+        *self.message.lock().unwrap() = String::new();
+        *self.current_item.lock().unwrap() = None;
+    }
+
+    pub fn start(&self) {
+        self.running.store(true, Ordering::Relaxed);
+        self.percent.store(0, Ordering::Relaxed);
+    }
+
+    pub fn finish(&self) {
+        self.running.store(false, Ordering::Relaxed);
+        self.percent.store(100, Ordering::Relaxed);
+    }
+
+    pub fn update(&self, stage: &str, percent: u8, message: &str, item: Option<String>) {
+        self.percent.store(percent, Ordering::Relaxed);
+        *self.stage.lock().unwrap() = stage.to_string();
+        *self.message.lock().unwrap() = message.to_string();
+        *self.current_item.lock().unwrap() = item;
+    }
+
+    pub fn snapshot(&self) -> ProgressSnapshot {
+        ProgressSnapshot {
+            running: self.running.load(Ordering::Relaxed),
+            percent: self.percent.load(Ordering::Relaxed),
+            stage: self.stage.lock().unwrap().clone(),
+            message: self.message.lock().unwrap().clone(),
+            current_item: self.current_item.lock().unwrap().clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProgressSnapshot {
+    pub running: bool,
+    pub percent: u8,
+    pub stage: String,
+    pub message: String,
+    pub current_item: Option<String>,
+}
+
+// ============================================================================
 // 各 Action 的参数定义
 // ============================================================================
 
 /// init 参数
 #[derive(Debug, Deserialize)]
 pub struct InitParams {
-    /// 配置目录路径（可选，默认使用系统标准路径）
     pub config_dir: Option<String>,
 }
 
 /// scan 参数
 #[derive(Debug, Deserialize)]
 pub struct ScanParams {
-    /// Workshop 路径（可选，默认从配置读取）
     pub workshop_path: Option<String>,
-    /// 壁纸 ID 过滤（可选）
-    pub ids: Option<Vec<String>>,
 }
 
 /// auto 参数
 #[derive(Debug, Deserialize)]
 pub struct AutoParams {
-    /// 壁纸 ID 过滤（可选）
     pub wallpaper_ids: Option<Vec<String>>,
+    #[serde(default)]
+    pub no_raw: bool,
+    #[serde(default)]
+    pub no_tex: bool,
+    #[serde(default)]
+    pub no_clean_unpacked: bool,
+    #[serde(default)]
+    pub no_incremental: bool,
 }
 
 /// pkg_unpack 参数
 #[derive(Debug, Deserialize)]
 pub struct PkgUnpackParams {
-    /// PKG 源列表
     pub sources: Vec<PkgSourceDto>,
-    /// 输出目录
     pub output: String,
 }
 
@@ -91,20 +165,28 @@ pub struct PkgSourceDto {
     pub pkg_paths: Vec<String>,
 }
 
+/// pkg_preview 参数
+#[derive(Debug, Deserialize)]
+pub struct PkgPreviewParams {
+    pub path: String,
+}
+
 /// tex_convert 参数
 #[derive(Debug, Deserialize)]
 pub struct TexConvertParams {
-    /// 输入路径
     pub input: String,
-    /// 输出路径（可选）
     pub output: Option<String>,
+}
+
+/// tex_preview 参数
+#[derive(Debug, Deserialize)]
+pub struct TexPreviewParams {
+    pub path: String,
 }
 
 /// config_set 参数
 #[derive(Debug, Deserialize)]
 pub struct ConfigSetParams {
-    /// 配置键
     pub key: String,
-    /// 配置值
     pub value: String,
 }
