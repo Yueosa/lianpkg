@@ -22,7 +22,7 @@ rayon = "1.10"
 [lib]
 name = "lianpkg"
 path = "src/lib.rs"
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [[bin]]
 name = "lianpkg"
