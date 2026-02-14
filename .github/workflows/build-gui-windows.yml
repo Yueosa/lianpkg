@@ -1,0 +1,49 @@
+name: Build Windows GUI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 2.0.1)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Rust 工具链 ──
+      - uses: dtolnay/rust-toolchain@stable
+
+      # ── 编译 lianpkg.dll ──
+      - name: Build Rust DLL
+        run: cargo build --release --lib
+
+      # ── Flutter SDK ──
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: master
+
+      # ── 编译 Flutter Windows GUI ──
+      - name: Build Flutter Windows
+        working-directory: gui
+        run: flutter build windows --release
+
+      # ── 把 lianpkg.dll 复制到 bundle 目录 ──
+      - name: Bundle DLL
+        run: |
+          copy target\release\lianpkg.dll gui\build\windows\x64\runner\Release\lianpkg.dll
+
+      # ── 打包为 zip ──
+      - name: Package
+        run: |
+          cd gui\build\windows\x64\runner\Release
+          7z a -tzip ${{ github.workspace }}\lianpkg-gui_${{ inputs.version }}_windows_x86_64.zip *
+
+      # ── 上传产物 ──
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lianpkg-gui_${{ inputs.version }}_windows_x86_64
+          path: lianpkg-gui_${{ inputs.version }}_windows_x86_64.zip
