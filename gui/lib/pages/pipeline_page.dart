@@ -67,7 +67,24 @@ class _PipelineNotifier extends StateNotifier<_PipelineUiState> {
   final Ref ref;
   Timer? _pollTimer;
 
-  _PipelineNotifier(this.ref) : super(const _PipelineUiState());
+  _PipelineNotifier(this.ref) : super(const _PipelineUiState()) {
+    _loadConfigDefaults();
+  }
+
+  /// 从持久化配置加载默认开关值
+  Future<void> _loadConfigDefaults() async {
+    try {
+      final config = await ref.read(configProvider.future);
+      state = state.copyWith(
+        noRaw: !config.enableRawOutput,
+        noTex: !config.pipeline.autoConvertTex,
+        noCleanUnpacked: !config.cleanUnpacked,
+        noIncremental: !config.pipeline.incremental,
+      );
+    } catch (_) {
+      // 配置加载失败则保持默认
+    }
+  }
 
   void toggleNoRaw(bool v) => state = state.copyWith(noRaw: v);
   void toggleNoTex(bool v) => state = state.copyWith(noTex: v);
