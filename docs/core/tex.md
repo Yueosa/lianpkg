@@ -39,7 +39,8 @@ src/core/tex/
 │ │   mipmap_count (i32)                        │  │
 │ │   ┌──────────────────────────────────────┐  │  │
 │ │   │ Mipmap[0]                            │  │  │
-│ │   │   [V4] param1, param2, condition_json│  │  │
+│ │   │   [V4] param1, param2,              │  │  │
+│ │   │        condition_json, param3        │  │  │
 │ │   │   width, height (u32)                │  │  │
 │ │   │   [V2+] is_lz4, decompressed_size   │  │  │
 │ │   │   byte_count (i32) + raw data        │  │  │
@@ -65,38 +66,42 @@ V4 且非视频时，effective_version 降级为 V3。
 
 ## Reader (`reader.rs`)
 
-### `read_fixed_string(reader, field_size)`
+### `read_n_string(reader, max_length)`
 
-精确消费 `field_size` 字节，在已读字节中找第一个 `\0` 截取字符串。
+TEX 中所有字符串字段的统一读取函数：
 
-| 旧 `read_n_string` | 新 `read_fixed_string` |
-|---------------------|------------------------|
-| 逐字节读到 `\0` 停止 | 一次性读 `field_size` 字节 |
-| 不消费 padding | 始终精确消费 `field_size` 字节 |
-| 可能导致后续偏移错位 | 偏移保证正确 |
+- 逐字节读取直到遇到 `\0` 停止
+- `max_length > 0` 时作为安全上限（用于 Magic 等固定长度字段，传 16）
+- `max_length == 0` 表示无限制（用于 V4 `condition_json` 等变长字段）
+- UTF-8 解码使用 `from_utf8_lossy`，无效字节替换为 `�`，不会返回错误
 
-### `read_null_terminated_string(reader, max_bytes)`
+### V4 Mipmap 额外字段
 
-用于 V4 mipmap 的变长 `condition_json` 字段：
-- 逐字节读取直到 `\0`
-- 安全上限 4096 字节，超过报 `InvalidData` 错误
-- 替代旧 `read_n_string(reader, 0)` 的无限读取行为
+V4 版本的 mipmap 在标准字段之前额外读取 4 个字段：
+
+```rust
+let _param1 = reader.read_i32::<LittleEndian>()?;         // 未知 i32
+let _param2 = reader.read_i32::<LittleEndian>()?;         // 未知 i32
+let _condition_json = read_n_string(reader, 0)?;           // 变长 JSON 字符串
+let _param3 = reader.read_i32::<LittleEndian>()?;         // 未知 i32
+```
+
+这些字段当前被忽略（`_` 前缀），仅消费字节以保持读取偏移正确。
 
 ### 校验
 
-| 字段 | 限制 | 旧行为 |
-|------|------|--------|
-| `image_count` | 0 ≤ n ≤ 1000 | 无检查 |
-| `mipmap_count` | 0 ≤ n ≤ 100 | 无检查 |
-| `byte_count` | ≥ 0 且 ≤ 512 MB | 无检查（负数导致 `usize` 溢出） |
-| Magic 字段 | 必须匹配已知值 | 已有检查，保留 |
+| 字段 | 限制 |
+|------|------|
+| `image_count` | 0 ≤ n ≤ 1000 |
+| `mipmap_count` | 0 ≤ n ≤ 100 |
+| `byte_count` | ≥ 0 且 ≤ 512 MB |
+| Magic 字段 | 必须匹配已知值 |
 
 ### 错误类型
 
 所有读取错误统一为 `CoreResult`：
 - `io::Error` → `CoreError::InvalidData`（通过 `read_err` 辅助函数转换）
 - Magic 不匹配 → `CoreError::InvalidData`
-- UTF-8 解码失败 → `CoreError::InvalidData`
 
 ---
 
@@ -121,7 +126,7 @@ V4 且非视频时，effective_version 降级为 V3。
 | RG88 | 2 bytes → RGBA (B=0, A=255) |
 | R8 | 1 byte → RGBA 灰度 (A=255) |
 
-返回类型从 `Result<Vec<u8>, String>` 改为 `CoreResult<Vec<u8>>`，统一错误链。
+返回 `CoreResult<Vec<u8>>`，统一错误链。
 
 ---
 
