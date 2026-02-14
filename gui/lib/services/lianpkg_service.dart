@@ -4,8 +4,10 @@ library;
 import 'dart:async';
 
 import '../models/config.dart';
+import '../models/pkg_preview.dart';
 import '../models/pipeline.dart';
 import '../models/state.dart';
+import '../models/tex_preview.dart';
 import '../models/wallpaper.dart';
 import 'ffi_bridge.dart';
 
@@ -20,7 +22,9 @@ class LianpkgService {
   Future<LianpkgConfig> init({String? configDir}) async {
     final result = await _ffi.callAsync('init', {?'config_dir': configDir});
     _checkError(result);
-    return LianpkgConfig.fromJson(result['data'] as Map<String, dynamic>);
+    // init 返回的是 AppContext { config, config_path, state_path }
+    final data = result['data'] as Map<String, dynamic>;
+    return LianpkgConfig.fromJson(data['config'] as Map<String, dynamic>);
   }
 
   // ============================================================================
@@ -71,7 +75,7 @@ class LianpkgService {
   // ============================================================================
 
   /// 解包 PKG 文件
-  Future<Map<String, dynamic>> unpackPkg({
+  Future<UnpackOutput> unpackPkg({
     required List<PkgSourceDto> sources,
     required String output,
   }) async {
@@ -80,14 +84,14 @@ class LianpkgService {
       'output': output,
     });
     _checkError(result);
-    return result['data'] as Map<String, dynamic>;
+    return UnpackOutput.fromJson(result['data'] as Map<String, dynamic>);
   }
 
   /// 预览 PKG 文件元数据
-  Future<Map<String, dynamic>> previewPkg(String path) async {
+  Future<PkgPreview> previewPkg(String path) async {
     final result = await _ffi.callAsync('pkg_preview', {'path': path});
     _checkError(result);
-    return result['data'] as Map<String, dynamic>;
+    return PkgPreview.fromJson(result['data'] as Map<String, dynamic>);
   }
 
   // ============================================================================
@@ -95,7 +99,7 @@ class LianpkgService {
   // ============================================================================
 
   /// 批量转换 TEX → PNG
-  Future<Map<String, dynamic>> convertTex({
+  Future<ConvertOutput> convertTex({
     required String input,
     String? output,
   }) async {
@@ -104,14 +108,14 @@ class LianpkgService {
       if (output != null) 'output': output,
     });
     _checkError(result);
-    return result['data'] as Map<String, dynamic>;
+    return ConvertOutput.fromJson(result['data'] as Map<String, dynamic>);
   }
 
   /// 预览 TEX 文件元数据
-  Future<Map<String, dynamic>> previewTex(String path) async {
+  Future<TexPreview> previewTex(String path) async {
     final result = await _ffi.callAsync('tex_preview', {'path': path});
     _checkError(result);
-    return result['data'] as Map<String, dynamic>;
+    return TexPreview.fromJson(result['data'] as Map<String, dynamic>);
   }
 
   // ============================================================================
