@@ -2,7 +2,7 @@
 
 use super::super::args::PkgArgs;
 use super::super::output as out;
-use lianpkg::api::native::{self, pkg};
+use lianpkg::api::native::{context, pkg};
 use lianpkg::core::path;
 use std::fs;
 use std::path::PathBuf;
@@ -12,43 +12,27 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     // 加载配置
     out::debug_api_enter(
         "native",
-        "init_config",
+        "init",
         &format!("config_path={:?}", config_path),
     );
-    let use_exe_dir = config_path.is_none();
-    let init_result = native::init_config(native::InitConfigInput {
-        config_dir: config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf()),
-        use_exe_dir,
-    });
+    let config_dir = config_path.map(|p| p.parent().unwrap_or(&p).to_path_buf());
+    let ctx = context::init(config_dir).map_err(|e| e.to_string())?;
     out::debug_api_return(&format!(
         "config_path={}",
-        init_result.config_path.display()
+        ctx.config_path.display()
     ));
-
-    out::debug_api_enter(
-        "native",
-        "load_config",
-        &format!("path={}", init_result.config_path.display()),
-    );
-    let config_result = native::load_config(native::LoadConfigInput {
-        config_path: init_result.config_path.clone(),
-    });
-    out::debug_api_return(&format!("loaded={}", config_result.config.is_some()));
-
-    let config = config_result.config.ok_or("Failed to load config")?;
 
     // 确定路径
     let input_path = args
         .path
         .clone()
-        .unwrap_or_else(|| config.unpacked_output_path.clone());
+        .unwrap_or_else(|| ctx.config.unpacked_output_path.clone());
 
     let output_path = args
         .output
         .clone()
-        .unwrap_or_else(|| config.unpacked_output_path.clone());
+        .unwrap_or_else(|| ctx.config.unpacked_output_path.clone());
 
-    // 判断输入类型
     if !input_path.exists() {
         return Err(format!(
             "Input path does not exist: {}",
@@ -67,10 +51,8 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     out::path_info("Output", &output_path);
     println!();
 
-    // 确保输出目录存在
     let _ = path::ensure_dir_compat(&output_path);
 
-    // 判断是单文件还是目录
     if input_path.is_file() && input_path.extension().map(|e| e == "pkg").unwrap_or(false) {
         // 单文件解包
         out::debug_api_enter(
@@ -78,7 +60,8 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
             "unpack_single",
             &format!("input={}", input_path.display()),
         );
-        let result = pkg::unpack_single(input_path.clone(), output_path);
+        let result = pkg::unpack_single(&input_path, &output_path)
+            .map_err(|e| e.to_string())?;
 
         if !result.success {
             out::debug_api_error(result.error.as_deref().unwrap_or("Unknown error"));
@@ -99,14 +82,13 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
         println!();
         out::success("PKG unpack completed!");
     } else {
-        // 目录批量解包：扫描目录下的 PKG 文件，构建 PkgSource
+        // 目录批量解包
         out::debug_api_enter(
             "pkg",
             "unpack_all",
             &format!("input={}", input_path.display()),
         );
 
-        // 收集目录下所有 .pkg 文件
         let mut pkg_sources = Vec::new();
         if let Ok(entries) = fs::read_dir(&input_path) {
             for entry in entries.flatten() {
@@ -114,7 +96,6 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
                 if path.is_file() {
                     if let Some(ext) = path.extension() {
                         if ext.to_string_lossy().to_lowercase() == "pkg" {
-                            // 从文件名推导壁纸 ID
                             let id = path
                                 .file_stem()
                                 .map(|s| s.to_string_lossy().to_string())
@@ -126,7 +107,6 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
                         }
                     }
                 } else if path.is_dir() {
-                    // 子目录：以目录名为 wallpaper_id，收集其中的 .pkg 文件
                     let dir_name = path
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
@@ -154,15 +134,9 @@ pub fn run(args: &PkgArgs, config_path: Option<PathBuf>) -> Result<(), String> {
             }
         }
 
-        let result = pkg::unpack_all(pkg::UnpackAllInput {
-            pkg_sources,
-            unpacked_output_path: output_path,
-        });
+        let result = pkg::unpack_all(&pkg_sources, &output_path)
+            .map_err(|e| e.to_string())?;
 
-        if !result.success && result.stats.pkg_success == 0 {
-            out::debug_api_error(result.error.as_deref().unwrap_or("Unknown error"));
-            return Err(result.error.unwrap_or_else(|| "Unknown error".to_string()));
-        }
         out::debug_api_return(&format!(
             "processed={}, success={}, failed={}",
             result.stats.pkg_processed, result.stats.pkg_success, result.stats.pkg_failed
@@ -195,10 +169,8 @@ fn run_preview(input_path: &PathBuf, verbose: bool) -> Result<(), String> {
     println!();
 
     if input_path.is_file() {
-        // 单文件预览
         preview_single_pkg(input_path, verbose)?;
     } else {
-        // 目录预览
         preview_directory(input_path, verbose)?;
     }
 
@@ -207,17 +179,7 @@ fn run_preview(input_path: &PathBuf, verbose: bool) -> Result<(), String> {
 
 /// 预览单个 PKG 文件
 fn preview_single_pkg(pkg_path: &std::path::Path, verbose: bool) -> Result<(), String> {
-    let result = pkg::preview_pkg(pkg::PreviewPkgInput {
-        pkg_path: pkg_path.to_path_buf(),
-    });
-
-    if !result.success {
-        return Err(result
-            .error
-            .unwrap_or_else(|| "Failed to parse PKG".to_string()));
-    }
-
-    let info = result.pkg_info.ok_or("PKG info is empty")?;
+    let info = pkg::preview_pkg(pkg_path).map_err(|e| e.to_string())?;
 
     out::info(&format!(
         "Version: {} | Files: {} | TEX: {}",
@@ -270,7 +232,6 @@ fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
     println!();
 
     if verbose {
-        // 详细模式：每个 PKG 单独显示
         for pkg_path in &pkg_files {
             out::subtitle(&pkg_path.file_name().unwrap_or_default().to_string_lossy());
             if let Err(e) = preview_single_pkg(pkg_path, false) {
@@ -278,18 +239,12 @@ fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
             }
         }
     } else {
-        // 简洁模式：表格汇总
         out::table_header(&[("File", 35), ("Version", 10), ("Files", 8), ("TEX", 6)]);
 
         for pkg_path in &pkg_files {
-            let result = pkg::preview_pkg(pkg::PreviewPkgInput {
-                pkg_path: pkg_path.clone(),
-            });
-
-            if result.success {
-                if let Some(info) = result.pkg_info {
+            match pkg::preview_pkg(pkg_path) {
+                Ok(info) => {
                     let filename = pkg_path.file_name().unwrap_or_default().to_string_lossy();
-
                     out::table_row(&[
                         (&filename, 35),
                         (&info.version, 10),
@@ -297,9 +252,15 @@ fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
                         (&info.tex_count.to_string(), 6),
                     ]);
                 }
-            } else {
-                let filename = pkg_path.file_name().unwrap_or_default().to_string_lossy();
-                out::table_row(&[(&filename, 35), ("ERROR", 10), ("-", 8), ("-", 6)]);
+                Err(e) => {
+                    let filename = pkg_path.file_name().unwrap_or_default().to_string_lossy();
+                    out::table_row(&[
+                        (&filename, 35),
+                        ("error", 10),
+                        (&e.to_string(), 8),
+                        ("-", 6),
+                    ]);
+                }
             }
         }
     }
@@ -308,7 +269,7 @@ fn preview_directory(dir_path: &PathBuf, verbose: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// 递归查找目录中的 PKG 文件
+/// 查找目录中的 PKG 文件
 fn find_pkg_files(dir: &PathBuf) -> Result<Vec<PathBuf>, String> {
     let mut pkg_files = Vec::new();
 
@@ -321,11 +282,6 @@ fn find_pkg_files(dir: &PathBuf) -> Result<Vec<PathBuf>, String> {
                 if ext.to_string_lossy().to_lowercase() == "pkg" {
                     pkg_files.push(path);
                 }
-            }
-        } else if path.is_dir() {
-            // 递归搜索
-            if let Ok(sub_files) = find_pkg_files(&path) {
-                pkg_files.extend(sub_files);
             }
         }
     }

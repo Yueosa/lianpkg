@@ -1,36 +1,24 @@
-//! TEX 处理高级接口
+//! TEX 处理接口
 //!
-//! 封装 core::tex 的底层操作，提供批量转换等便捷方法。
+//! 封装 core::tex 的底层操作，提供批量转换、预览等功能。
+//! 所有接口返回 `CoreResult<T>`。
 
-use crate::core::{path, tex};
+use crate::core::{error::CoreResult, tex};
+use super::util;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ============================================================================
-// 结构体定义
+// 类型定义
 // ============================================================================
 
-/// 批量转换入参
-#[derive(Debug, Clone)]
-pub struct ConvertAllInput {
-    /// 解包输出目录（从此目录搜索 TEX 文件）
-    pub unpacked_path: PathBuf,
-    /// 转换输出目录，None 则输出到解包目录下的 tex_converted 子目录
-    pub output_path: Option<PathBuf>,
-}
-
-/// 批量转换返回值
+/// 批量转换输出
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConvertAllOutput {
-    /// 是否成功（全部成功才为 true）
-    pub success: bool,
+pub struct ConvertOutput {
     /// 转换结果列表
     pub results: Vec<ConvertResult>,
     /// 统计信息
     pub stats: ConvertStats,
-    /// 错误信息
-    pub error: Option<String>,
 }
 
 /// 单个 TEX 转换结果
@@ -67,24 +55,6 @@ pub struct ConvertStats {
     pub video_count: usize,
 }
 
-/// 预览 TEX 入参
-#[derive(Debug, Clone)]
-pub struct PreviewTexInput {
-    /// TEX 文件路径
-    pub tex_path: PathBuf,
-}
-
-/// 预览 TEX 返回值
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PreviewTexOutput {
-    /// 是否成功
-    pub success: bool,
-    /// TEX 信息
-    pub tex_info: Option<TexPreview>,
-    /// 错误信息
-    pub error: Option<String>,
-}
-
 /// TEX 预览信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TexPreview {
@@ -111,65 +81,62 @@ pub struct TexPreview {
 }
 
 // ============================================================================
-// 接口实现
+// 接口
 // ============================================================================
 
 /// 批量转换 TEX 文件
 ///
-/// 扫描 unpacked_path 下所有 .tex 文件并转换
-pub fn convert_all(input: ConvertAllInput) -> ConvertAllOutput {
-    // 查找所有 TEX 文件
-    let tex_files = find_tex_files(&input.unpacked_path);
+/// 扫描 unpacked_path 下所有 .tex 文件并转换。
+pub fn convert_all(
+    unpacked_path: &Path,
+    output_path: Option<&Path>,
+) -> CoreResult<ConvertOutput> {
+    let tex_files = util::find_tex_files(unpacked_path);
 
     if tex_files.is_empty() {
-        return ConvertAllOutput {
-            success: true,
+        return Ok(ConvertOutput {
             results: vec![],
             stats: ConvertStats::default(),
-            error: None,
-        };
+        });
     }
 
     let mut results = Vec::new();
     let mut stats = ConvertStats::default();
+    let output_opt = output_path.map(|p| p.to_path_buf());
 
     for tex_path in tex_files {
         stats.tex_processed += 1;
 
-        // 确定输出路径
-        let output_path =
-            determine_output_path(&tex_path, &input.unpacked_path, &input.output_path);
+        let out_path = util::determine_tex_output_path(
+            &tex_path,
+            unpacked_path,
+            &output_opt,
+        );
 
-        // 执行转换
-        let convert_result = tex::convert_tex(tex::ConvertTexInput {
+        match tex::convert_tex(tex::ConvertTexInput {
             file_path: tex_path.clone(),
-            output_path: output_path.clone(),
-        });
-
-        match convert_result {
+            output_path: out_path.clone(),
+        }) {
             Ok(result) => {
                 stats.tex_success += 1;
+                let info = &result.tex_info;
+                if info.is_video {
+                    stats.video_count += 1;
+                } else {
+                    stats.image_count += 1;
+                }
 
-                let tex_info = {
-                    let info = &result.tex_info;
-                    if info.is_video {
-                        stats.video_count += 1;
-                    } else {
-                        stats.image_count += 1;
-                    }
-
-                    TexPreview {
-                        version: info.version.clone(),
-                        format: info.format.clone(),
-                        width: info.width,
-                        height: info.height,
-                        image_count: info.image_count,
-                        mipmap_count: info.mipmap_count,
-                        is_compressed: info.is_compressed,
-                        is_video: info.is_video,
-                        data_size: info.data_size,
-                        recommended_output: if info.is_video { "mp4" } else { "png" }.to_string(),
-                    }
+                let tex_info = TexPreview {
+                    version: info.version.clone(),
+                    format: info.format.clone(),
+                    width: info.width,
+                    height: info.height,
+                    image_count: info.image_count,
+                    mipmap_count: info.mipmap_count,
+                    is_compressed: info.is_compressed,
+                    is_video: info.is_video,
+                    data_size: info.data_size,
+                    recommended_output: if info.is_video { "mp4" } else { "png" }.to_string(),
                 };
 
                 results.push(ConvertResult {
@@ -185,7 +152,7 @@ pub fn convert_all(input: ConvertAllInput) -> ConvertAllOutput {
                 stats.tex_failed += 1;
                 results.push(ConvertResult {
                     input_path: tex_path,
-                    output_path,
+                    output_path: out_path,
                     success: false,
                     format: None,
                     tex_info: None,
@@ -195,57 +162,14 @@ pub fn convert_all(input: ConvertAllInput) -> ConvertAllOutput {
         }
     }
 
-    ConvertAllOutput {
-        success: stats.tex_failed == 0,
-        results,
-        stats,
-        error: if stats.tex_failed > 0 {
-            Some(format!("{} TEX files failed to convert", stats.tex_failed))
-        } else {
-            None
-        },
-    }
-}
-
-/// 预览 TEX 文件信息
-///
-/// 不执行转换，只解析显示 TEX 文件的格式信息
-pub fn preview_tex(input: PreviewTexInput) -> PreviewTexOutput {
-    match tex::parse_tex(tex::ParseTexInput {
-        file_path: input.tex_path,
-    }) {
-        Ok(result) => {
-            let info = result.tex_info;
-            PreviewTexOutput {
-                success: true,
-                tex_info: Some(TexPreview {
-                    version: info.version,
-                    format: info.format,
-                    width: info.width,
-                    height: info.height,
-                    image_count: info.image_count,
-                    mipmap_count: info.mipmap_count,
-                    is_compressed: info.is_compressed,
-                    is_video: info.is_video,
-                    data_size: info.data_size,
-                    recommended_output: if info.is_video { "mp4" } else { "png" }.to_string(),
-                }),
-                error: None,
-            }
-        }
-        Err(e) => PreviewTexOutput {
-            success: false,
-            tex_info: None,
-            error: Some(e.to_string()),
-        },
-    }
+    Ok(ConvertOutput { results, stats })
 }
 
 /// 转换单个 TEX 文件
-pub fn convert_single(tex_path: PathBuf, output_path: PathBuf) -> ConvertResult {
+pub fn convert_single(tex_path: &Path, output_path: &Path) -> CoreResult<ConvertResult> {
     match tex::convert_tex(tex::ConvertTexInput {
-        file_path: tex_path.clone(),
-        output_path: output_path.clone(),
+        file_path: tex_path.to_path_buf(),
+        output_path: output_path.to_path_buf(),
     }) {
         Ok(result) => {
             let info = &result.tex_info;
@@ -262,92 +186,44 @@ pub fn convert_single(tex_path: PathBuf, output_path: PathBuf) -> ConvertResult 
                 recommended_output: if info.is_video { "mp4" } else { "png" }.to_string(),
             };
 
-            ConvertResult {
-                input_path: tex_path,
+            Ok(ConvertResult {
+                input_path: tex_path.to_path_buf(),
                 output_path: result.converted_file.output_path,
                 success: true,
                 format: Some(result.converted_file.format),
                 tex_info: Some(tex_info),
                 error: None,
-            }
+            })
         }
-        Err(e) => ConvertResult {
-            input_path: tex_path,
-            output_path,
+        Err(e) => Ok(ConvertResult {
+            input_path: tex_path.to_path_buf(),
+            output_path: output_path.to_path_buf(),
             success: false,
             format: None,
             tex_info: None,
             error: Some(e.to_string()),
-        },
+        }),
     }
 }
 
-// ============================================================================
-// 内部工具函数
-// ============================================================================
+/// 预览 TEX 文件信息（不转换）
+pub fn preview_tex(tex_path: &Path) -> CoreResult<TexPreview> {
+    let result = tex::parse_tex(tex::ParseTexInput {
+        file_path: tex_path.to_path_buf(),
+    })?;
 
-/// 查找目录下所有 TEX 文件
-fn find_tex_files(dir: &PathBuf) -> Vec<PathBuf> {
-    let mut tex_files = Vec::new();
+    let info = result.tex_info;
 
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() {
-                if let Some(ext) = path.extension() {
-                    if ext.to_string_lossy().to_lowercase() == "tex" {
-                        tex_files.push(path);
-                    }
-                }
-            } else if path.is_dir() {
-                // 递归搜索子目录
-                tex_files.extend(find_tex_files(&path));
-            }
-        }
-    }
-
-    tex_files
-}
-
-/// 确定输出路径
-fn determine_output_path(
-    tex_path: &std::path::Path,
-    unpacked_path: &std::path::Path,
-    custom_output: &Option<PathBuf>,
-) -> PathBuf {
-    match custom_output {
-        Some(output_base) => {
-            // 使用自定义输出目录，保持相对路径结构
-            if let Ok(relative) = tex_path.strip_prefix(unpacked_path) {
-                output_base.join(relative).with_extension("")
-            } else {
-                output_base.join(tex_path.file_stem().unwrap_or_default())
-            }
-        }
-        None => {
-            // 使用默认的 tex_converted 子目录
-            // 需要找到壁纸的根目录（scene_root）
-            let scene_root = if let Ok(relative) = tex_path.strip_prefix(unpacked_path) {
-                // relative 如: "123456/materials/scene.tex"
-                // 取第一级目录: "123456"
-                if let Some(first_component) = relative.components().next() {
-                    unpacked_path.join(first_component.as_os_str())
-                } else {
-                    unpacked_path.to_path_buf()
-                }
-            } else {
-                // 无法确定相对路径，使用 tex 文件的父目录
-                tex_path.parent().unwrap_or(unpacked_path).to_path_buf()
-            };
-
-            let output_dir = path::resolve_tex_output_dir_compat(
-                None,
-                &scene_root,
-                Some(tex_path),
-                Some(&scene_root),
-            );
-            let _ = path::ensure_dir_compat(&output_dir);
-            output_dir.join(tex_path.file_stem().unwrap_or_default())
-        }
-    }
+    Ok(TexPreview {
+        version: info.version,
+        format: info.format,
+        width: info.width,
+        height: info.height,
+        image_count: info.image_count,
+        mipmap_count: info.mipmap_count,
+        is_compressed: info.is_compressed,
+        is_video: info.is_video,
+        data_size: info.data_size,
+        recommended_output: if info.is_video { "mp4" } else { "png" }.to_string(),
+    })
 }
