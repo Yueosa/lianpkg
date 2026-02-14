@@ -12,6 +12,7 @@ import '../models/tex_preview.dart';
 import '../models/wallpaper.dart';
 import '../providers/providers.dart';
 import '../services/lianpkg_service.dart' show PkgSourceDto;
+import '../utils/open_folder.dart';
 
 class DetailPage extends ConsumerStatefulWidget {
   final WallpaperInfo wallpaper;
@@ -383,6 +384,12 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   fontFamily: 'monospace',
                 ),
               ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.folder_open, size: 16),
+              iconSize: 16,
+              tooltip: '打开文件夹',
+              onPressed: () => openFolder(wallpaper.folderPath),
             ),
             IconButton(
               icon: const Icon(Icons.copy, size: 16),
