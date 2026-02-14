@@ -1,4 +1,4 @@
-/// Pipeline 流水线页 — 选项配置 + 启动 + 实时进度 + 结果
+/// Pipeline 流水线页 — 流程图 + 选项配置 + 启动 + 实时进度 + 结果
 library;
 
 import 'dart:async';
@@ -67,23 +67,22 @@ class _PipelineNotifier extends StateNotifier<_PipelineUiState> {
   final Ref ref;
   Timer? _pollTimer;
 
-  _PipelineNotifier(this.ref) : super(const _PipelineUiState()) {
-    _loadConfigDefaults();
-  }
+  _PipelineNotifier(this.ref) : super(const _PipelineUiState());
 
-  /// 从持久化配置加载默认开关值
-  Future<void> _loadConfigDefaults() async {
-    try {
-      final config = await ref.read(configProvider.future);
-      state = state.copyWith(
-        noRaw: !config.enableRawOutput,
-        noTex: !config.pipeline.autoConvertTex,
-        noCleanUnpacked: !config.cleanUnpacked,
-        noIncremental: !config.pipeline.incremental,
-      );
-    } catch (_) {
-      // 配置加载失败则保持默认
-    }
+  /// 从持久化配置同步开关值（仅 idle 时调用）
+  void syncFromConfig(
+    bool enableRaw,
+    bool enableTex,
+    bool cleanUnpacked,
+    bool incremental,
+  ) {
+    if (state.runState != _RunState.idle) return;
+    state = state.copyWith(
+      noRaw: !enableRaw,
+      noTex: !enableTex,
+      noCleanUnpacked: !cleanUnpacked,
+      noIncremental: !incremental,
+    );
   }
 
   void toggleNoRaw(bool v) => state = state.copyWith(noRaw: v);
@@ -126,6 +125,7 @@ class _PipelineNotifier extends StateNotifier<_PipelineUiState> {
       // 刷新关联数据
       ref.invalidate(statusProvider);
       ref.invalidate(stateProvider);
+      ref.invalidate(scanResultProvider);
     } catch (e) {
       _pollTimer?.cancel();
       state = state.copyWith(
@@ -164,151 +164,424 @@ class PipelinePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final uiState = ref.watch(_pipelineStateProvider);
     final notifier = ref.read(_pipelineStateProvider.notifier);
+    final configAsync = ref.watch(configProvider);
     final theme = Theme.of(context);
+
+    // 配置加载后同步到 notifier（仅 idle 时）
+    configAsync.whenData((config) {
+      if (uiState.runState == _RunState.idle) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          notifier.syncFromConfig(
+            config.enableRawOutput,
+            config.pipeline.autoConvertTex,
+            config.cleanUnpacked,
+            config.pipeline.incremental,
+          );
+        });
+      }
+    });
 
     return Padding(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('自动流水线', style: theme.textTheme.headlineMedium),
-          const SizedBox(height: 20),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('自动流水线', style: theme.textTheme.headlineMedium),
+            const SizedBox(height: 8),
+            Text(
+              '一键完成壁纸处理：扫描 → 复制 / 解包 → 转换',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 24),
 
-          // 选项
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('选项', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 16,
-                    children: [
-                      _OptionSwitch(
-                        label: '复制 Raw',
-                        value: !uiState.noRaw,
-                        onChanged: uiState.runState != _RunState.running
-                            ? (v) => notifier.toggleNoRaw(!v)
-                            : null,
-                      ),
-                      _OptionSwitch(
-                        label: '转换 TEX',
-                        value: !uiState.noTex,
-                        onChanged: uiState.runState != _RunState.running
-                            ? (v) => notifier.toggleNoTex(!v)
-                            : null,
-                      ),
-                      _OptionSwitch(
-                        label: '清理解包',
-                        value: !uiState.noCleanUnpacked,
-                        onChanged: uiState.runState != _RunState.running
-                            ? (v) => notifier.toggleNoCleanUnpacked(!v)
-                            : null,
-                      ),
-                      _OptionSwitch(
-                        label: '增量模式',
-                        value: !uiState.noIncremental,
-                        onChanged: uiState.runState != _RunState.running
-                            ? (v) => notifier.toggleNoIncremental(!v)
-                            : null,
-                      ),
-                    ],
+            // ── 流程图 ──
+            _FlowDiagram(
+              enableRaw: !uiState.noRaw,
+              enableTex: !uiState.noTex,
+              enableClean: !uiState.noCleanUnpacked,
+              incremental: !uiState.noIncremental,
+              runState: uiState.runState,
+              stage: uiState.progress.stage,
+            ),
+            const SizedBox(height: 24),
+
+            // ── 选项 ──
+            Text('运行选项', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            _OptionTile(
+              icon: Icons.file_copy_outlined,
+              title: '复制 Raw',
+              subtitle: '将非PKG壁纸的原始文件复制到 Raw 输出目录',
+              value: !uiState.noRaw,
+              enabled: uiState.runState != _RunState.running,
+              onChanged: (v) => notifier.toggleNoRaw(!v),
+            ),
+            _OptionTile(
+              icon: Icons.image_outlined,
+              title: '转换 TEX',
+              subtitle: '将 TEX 纹理文件转换为标准图片/视频格式',
+              value: !uiState.noTex,
+              enabled: uiState.runState != _RunState.running,
+              onChanged: (v) => notifier.toggleNoTex(!v),
+            ),
+            _OptionTile(
+              icon: Icons.cleaning_services_outlined,
+              title: '清理解包产物',
+              subtitle: '转换完成后自动删除中间解包文件以节省空间',
+              value: !uiState.noCleanUnpacked,
+              enabled: uiState.runState != _RunState.running,
+              onChanged: (v) => notifier.toggleNoCleanUnpacked(!v),
+            ),
+            _OptionTile(
+              icon: Icons.fast_forward_outlined,
+              title: '增量模式',
+              subtitle: '跳过已处理过的壁纸，仅处理新增内容',
+              value: !uiState.noIncremental,
+              enabled: uiState.runState != _RunState.running,
+              onChanged: (v) => notifier.toggleNoIncremental(!v),
+            ),
+            const SizedBox(height: 20),
+
+            // ── 启动按钮 ──
+            Row(
+              children: [
+                if (uiState.runState != _RunState.running)
+                  FilledButton.icon(
+                    onPressed: () => notifier.start(),
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('开始处理'),
+                  )
+                else
+                  FilledButton.icon(
+                    onPressed: null,
+                    icon: const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    label: const Text('处理中...'),
+                  ),
+                if (uiState.runState == _RunState.done ||
+                    uiState.runState == _RunState.error) ...[
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => notifier.reset(),
+                    icon: const Icon(Icons.restart_alt),
+                    label: const Text('重置'),
                   ),
                 ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // 启动按钮
-          Row(
-            children: [
-              if (uiState.runState != _RunState.running)
-                FilledButton.icon(
-                  onPressed: () => notifier.start(),
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('开始处理'),
-                )
-              else
-                FilledButton.icon(
-                  onPressed: null,
-                  icon: const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  label: const Text('处理中...'),
-                ),
-              if (uiState.runState == _RunState.done ||
-                  uiState.runState == _RunState.error) ...[
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: () => notifier.reset(),
-                  icon: const Icon(Icons.restart_alt),
-                  label: const Text('重置'),
-                ),
               ],
+            ),
+            const SizedBox(height: 24),
+
+            // ── 进度 ──
+            if (uiState.runState == _RunState.running) ...[
+              _ProgressPanel(progress: uiState.progress),
             ],
-          ),
-          const SizedBox(height: 24),
 
-          // 进度
-          if (uiState.runState == _RunState.running) ...[
-            _ProgressPanel(progress: uiState.progress),
-          ],
+            // ── 结果 ──
+            if (uiState.runState == _RunState.done &&
+                uiState.output != null) ...[
+              _ResultPanel(output: uiState.output!),
+            ],
 
-          // 结果
-          if (uiState.runState == _RunState.done && uiState.output != null) ...[
-            _ResultPanel(output: uiState.output!),
-          ],
-
-          // 错误
-          if (uiState.runState == _RunState.error) ...[
-            Card(
-              color: theme.colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Icon(Icons.error, color: theme.colorScheme.error),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(uiState.errorMessage ?? '未知错误')),
-                  ],
+            // ── 错误 ──
+            if (uiState.runState == _RunState.error) ...[
+              Card(
+                color: theme.colorScheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error, color: theme.colorScheme.error),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(uiState.errorMessage ?? '未知错误')),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
-class _OptionSwitch extends StatelessWidget {
-  final String label;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
+// =============================================================================
+// 流程图
+// =============================================================================
 
-  const _OptionSwitch({
-    required this.label,
-    required this.value,
-    this.onChanged,
+class _FlowDiagram extends StatelessWidget {
+  final bool enableRaw;
+  final bool enableTex;
+  final bool enableClean;
+  final bool incremental;
+  final _RunState runState;
+  final String stage;
+
+  const _FlowDiagram({
+    required this.enableRaw,
+    required this.enableTex,
+    required this.enableClean,
+    required this.incremental,
+    required this.runState,
+    required this.stage,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    final theme = Theme.of(context);
+    final isRunning = runState == _RunState.running;
+    final isDone = runState == _RunState.done;
+
+    final steps = <_StepData>[
+      _StepData(
+        icon: Icons.search,
+        label: '扫描壁纸',
+        enabled: true,
+        active: isRunning && (stage.contains('scan') || stage.contains('Scan')),
+        badge: incremental ? '增量' : null,
+      ),
+      _StepData(
+        icon: Icons.file_copy_outlined,
+        label: '复制 Raw',
+        enabled: enableRaw,
+        active:
+            isRunning &&
+            (stage.contains('copy') ||
+                stage.contains('Copy') ||
+                stage.contains('raw') ||
+                stage.contains('Raw')),
+      ),
+      _StepData(
+        icon: Icons.inventory_2_outlined,
+        label: '解包 PKG',
+        enabled: true,
+        active:
+            isRunning &&
+            (stage.contains('unpack') ||
+                stage.contains('Unpack') ||
+                stage.contains('pkg') ||
+                stage.contains('Pkg')),
+      ),
+      _StepData(
+        icon: Icons.image_outlined,
+        label: '转换 TEX',
+        enabled: enableTex,
+        active:
+            isRunning &&
+            (stage.contains('convert') ||
+                stage.contains('Convert') ||
+                stage.contains('tex') ||
+                stage.contains('Tex')),
+        badge: enableClean ? '清理' : null,
+      ),
+      _StepData(
+        icon: Icons.check_circle_outlined,
+        label: '完成',
+        enabled: true,
+        active: isDone,
+      ),
+    ];
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.account_tree_outlined,
+                  size: 18,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text('处理流程', style: theme.textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (var i = 0; i < steps.length; i++) ...[
+                    _StepBox(step: steps[i]),
+                    if (i < steps.length - 1)
+                      _Arrow(enabled: steps[i].enabled && steps[i + 1].enabled),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StepData {
+  final IconData icon;
+  final String label;
+  final bool enabled;
+  final bool active;
+  final String? badge;
+
+  const _StepData({
+    required this.icon,
+    required this.label,
+    required this.enabled,
+    this.active = false,
+    this.badge,
+  });
+}
+
+class _StepBox extends StatelessWidget {
+  final _StepData step;
+  const _StepBox({required this.step});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = step.active
+        ? theme.colorScheme.primary
+        : step.enabled
+        ? theme.colorScheme.onSurface
+        : theme.colorScheme.outline.withAlpha(100);
+    final bgColor = step.active
+        ? theme.colorScheme.primaryContainer
+        : step.enabled
+        ? theme.colorScheme.surfaceContainerHighest
+        : theme.colorScheme.surfaceContainerHighest.withAlpha(60);
+
+    return Stack(
+      clipBehavior: Clip.none,
       children: [
-        Switch(value: value, onChanged: onChanged),
-        const SizedBox(width: 4),
-        Text(label),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: 88,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(12),
+            border: step.active
+                ? Border.all(color: theme.colorScheme.primary, width: 2)
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (step.active)
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: theme.colorScheme.primary,
+                  ),
+                )
+              else
+                Icon(step.icon, size: 28, color: color),
+              const SizedBox(height: 6),
+              Text(
+                step.label,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: color,
+                  fontWeight: step.active ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // 角标
+        if (step.badge != null)
+          Positioned(
+            top: -6,
+            right: -6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.tertiary,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                step.badge!,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onTertiary,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
 }
+
+class _Arrow extends StatelessWidget {
+  final bool enabled;
+  const _Arrow({required this.enabled});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = enabled
+        ? Theme.of(context).colorScheme.outline
+        : Theme.of(context).colorScheme.outline.withAlpha(60);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Icon(Icons.arrow_forward, size: 18, color: color),
+    );
+  }
+}
+
+// =============================================================================
+// 选项 Tile
+// =============================================================================
+
+class _OptionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  const _OptionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      margin: const EdgeInsets.only(bottom: 4),
+      child: SwitchListTile(
+        secondary: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+        value: value,
+        onChanged: enabled ? onChanged : null,
+        dense: true,
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 进度面板
+// =============================================================================
 
 class _ProgressPanel extends StatelessWidget {
   final ProgressSnapshot progress;
@@ -353,6 +626,10 @@ class _ProgressPanel extends StatelessWidget {
   }
 }
 
+// =============================================================================
+// 结果面板
+// =============================================================================
+
 class _ResultPanel extends StatelessWidget {
   final AutoOutput output;
   const _ResultPanel({required this.output});
@@ -371,50 +648,85 @@ class _ResultPanel extends StatelessWidget {
               children: [
                 Icon(Icons.check_circle, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
-                Text('完成', style: theme.textTheme.titleMedium),
+                Text('处理完成', style: theme.textTheme.titleMedium),
                 const Spacer(),
-                Text(
-                  '${output.durationSecs.toStringAsFixed(1)}s',
-                  style: theme.textTheme.bodyMedium,
+                Chip(
+                  avatar: const Icon(Icons.timer_outlined, size: 16),
+                  label: Text('${output.durationSecs.toStringAsFixed(1)}s'),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const Divider(height: 24),
+
+            // 统计行
             Wrap(
               spacing: 24,
-              runSpacing: 8,
+              runSpacing: 12,
               children: [
-                _ResultStat('壁纸', output.stats.wallpapersProcessed),
-                _ResultStat('跳过', output.stats.wallpapersSkipped),
-                _ResultStat('PKG 解包', output.stats.pkgsUnpacked),
-                _ResultStat('TEX 转换', output.stats.texsConverted),
-                if (output.copyOutput != null) ...[
-                  _ResultStat('Raw 复制', output.copyOutput!.copiedCount),
-                  if (output.copyOutput!.skipped > 0)
-                    _ResultStat('跳过', output.copyOutput!.skipped),
-                ],
-                if (output.pkgOutput != null) ...[
-                  _ResultStat('解包文件', output.pkgOutput!.totalFiles),
-                  _ResultStat('TEX 文件', output.pkgOutput!.texFiles),
-                  if (output.pkgOutput!.pkgFailed > 0)
-                    _ResultStat(
-                      '解包错误',
-                      output.pkgOutput!.pkgFailed,
-                      isError: true,
-                    ),
-                ],
-                if (output.texOutput != null) ...[
-                  _ResultStat('图片', output.texOutput!.imageCount),
-                  _ResultStat('视频', output.texOutput!.videoCount),
-                  if (output.texOutput!.texFailed > 0)
-                    _ResultStat(
-                      'TEX 错误',
-                      output.texOutput!.texFailed,
-                      isError: true,
-                    ),
-                ],
+                _ResultStat(
+                  '壁纸',
+                  output.stats.wallpapersProcessed,
+                  icon: Icons.wallpaper,
+                ),
+                _ResultStat(
+                  '跳过',
+                  output.stats.wallpapersSkipped,
+                  icon: Icons.skip_next,
+                ),
+                _ResultStat(
+                  'PKG 解包',
+                  output.stats.pkgsUnpacked,
+                  icon: Icons.inventory_2,
+                ),
+                _ResultStat(
+                  'TEX 转换',
+                  output.stats.texsConverted,
+                  icon: Icons.image,
+                ),
               ],
             ),
+
+            // 详细统计
+            if (output.copyOutput != null ||
+                output.pkgOutput != null ||
+                output.texOutput != null) ...[
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Text('详细统计', style: theme.textTheme.labelMedium),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 24,
+                runSpacing: 8,
+                children: [
+                  if (output.copyOutput != null) ...[
+                    _ResultStat('Raw 复制', output.copyOutput!.copiedCount),
+                    if (output.copyOutput!.skipped > 0)
+                      _ResultStat('跳过', output.copyOutput!.skipped),
+                  ],
+                  if (output.pkgOutput != null) ...[
+                    _ResultStat('解包文件', output.pkgOutput!.totalFiles),
+                    _ResultStat('TEX 文件', output.pkgOutput!.texFiles),
+                    if (output.pkgOutput!.pkgFailed > 0)
+                      _ResultStat(
+                        '解包错误',
+                        output.pkgOutput!.pkgFailed,
+                        isError: true,
+                      ),
+                  ],
+                  if (output.texOutput != null) ...[
+                    _ResultStat('图片', output.texOutput!.imageCount),
+                    _ResultStat('视频', output.texOutput!.videoCount),
+                    if (output.texOutput!.texFailed > 0)
+                      _ResultStat(
+                        'TEX 错误',
+                        output.texOutput!.texFailed,
+                        isError: true,
+                      ),
+                  ],
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -426,21 +738,30 @@ class _ResultStat extends StatelessWidget {
   final String label;
   final int value;
   final bool isError;
+  final IconData? icon;
 
-  const _ResultStat(this.label, this.value, {this.isError = false});
+  const _ResultStat(this.label, this.value, {this.isError = false, this.icon});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final theme = Theme.of(context);
+    final color = isError ? theme.colorScheme.error : null;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
+        if (icon != null) ...[
+          Icon(icon, size: 16, color: color ?? theme.colorScheme.primary),
+          const SizedBox(width: 4),
+        ],
         Text(
           '$value',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+          style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
-            color: isError ? Theme.of(context).colorScheme.error : null,
+            color: color,
           ),
         ),
-        Text(label, style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(width: 4),
+        Text(label, style: theme.textTheme.labelSmall?.copyWith(color: color)),
       ],
     );
   }
