@@ -49,6 +49,27 @@ pub fn check_space(input: CheckSpaceInput) -> CoreResult<CheckSpaceOutput> {
     })
 }
 
+/// 递归计算目录大小（字节）
+///
+/// 目录不存在时返回 0
+pub fn get_dir_size(path: &Path) -> u64 {
+    if !path.exists() {
+        return 0;
+    }
+    let mut size: u64 = 0;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                size += get_dir_size(&p);
+            } else if let Ok(meta) = std::fs::metadata(&p) {
+                size += meta.len();
+            }
+        }
+    }
+    size
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
