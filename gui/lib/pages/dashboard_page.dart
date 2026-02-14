@@ -52,37 +52,70 @@ class DashboardPage extends ConsumerWidget {
                 children: [
                   _StatCard(
                     icon: Icons.wallpaper,
-                    label: '已处理',
-                    value: '${status.totalProcessed}',
+                    label: '总壁纸',
+                    value: '${status.totalWallpapers}',
                     color: theme.colorScheme.primary,
                   ),
                   const SizedBox(width: 12),
                   _StatCard(
-                    icon: Icons.inventory_2,
-                    label: 'PKG',
-                    value: '${status.pkgCount}',
-                    color: theme.colorScheme.tertiary,
+                    icon: Icons.check_circle,
+                    label: '已处理',
+                    value: '${status.totalProcessed}',
+                    color: Colors.green,
                   ),
                   const SizedBox(width: 12),
                   _StatCard(
-                    icon: Icons.file_copy,
-                    label: 'Raw',
-                    value: '${status.rawCount}',
-                    color: theme.colorScheme.secondary,
+                    icon: Icons.pending,
+                    label: '待处理',
+                    value: '${status.pendingTotal}',
+                    color: status.pendingTotal > 0
+                        ? theme.colorScheme.tertiary
+                        : theme.colorScheme.outline,
                   ),
                   const SizedBox(width: 12),
                   _StatCard(
                     icon: Icons.skip_next,
                     label: '已跳过',
-                    value: '${status.skippedCount}',
+                    value: '${status.processedSkipped}',
                     color: theme.colorScheme.outline,
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+
+              // 待处理详情（有待处理时才显示）
+              if (status.pendingTotal > 0) ...[
+                Card(
+                  color: theme.colorScheme.tertiaryContainer.withAlpha(60),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: theme.colorScheme.tertiary,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '待处理: ${status.pendingPkg} 个 PKG 壁纸'
+                          '${status.pendingRaw > 0 ? ", ${status.pendingRaw} 个 Raw 壁纸" : ""}'
+                          '${status.pendingPkgSize > 0 ? " (PKG 源 ${DiskUsage.formatBytes(status.pendingPkgSize)})" : ""}',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               const SizedBox(height: 24),
 
-              // 磁盘用量估算
-              _DiskEstimateCard(estimate: status.diskEstimate),
+              // 磁盘占用
+              _DiskUsageCard(
+                diskUsage: status.diskUsage,
+                processedPkg: status.processedPkg,
+                processedRaw: status.processedRaw,
+              ),
               const SizedBox(height: 24),
 
               // 快捷操作
