@@ -100,7 +100,7 @@ fn apply_overrides(config: &mut context::RuntimeConfig, args: &AutoArgs) {
         config.unpacked_output_path = p.clone();
     }
     if let Some(ref p) = args.tex_output {
-        config.converted_output_path = Some(p.clone());
+        config.converted_output_path = p.clone();
     }
     if args.no_raw {
         config.enable_raw_output = false;
@@ -158,9 +158,7 @@ fn print_config(config: &context::RuntimeConfig, args: &AutoArgs) {
     out::path_info("Workshop", &config.workshop_path);
     out::path_info("Raw Output", &config.raw_output_path);
     out::path_info("Unpacked Output", &config.unpacked_output_path);
-    if let Some(ref p) = config.converted_output_path {
-        out::path_info("TEX Output", p);
-    }
+    out::path_info("TEX Output", &config.converted_output_path);
     println!();
 
     out::option_bool("Raw Output", config.enable_raw_output);

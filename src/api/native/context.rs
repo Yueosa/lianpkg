@@ -37,8 +37,8 @@ pub struct RuntimeConfig {
     pub unpacked_output_path: PathBuf,
     /// 是否清理 unpacked
     pub clean_unpacked: bool,
-    /// Tex 转换输出路径（可选）
-    pub converted_output_path: Option<PathBuf>,
+    /// Tex 转换输出路径
+    pub converted_output_path: PathBuf,
     /// 流水线配置
     pub pipeline: PipelineConfig,
 }
@@ -222,7 +222,8 @@ fn parse_config_toml(content: &str) -> CoreResult<RuntimeConfig> {
         .and_then(|t| t.get("converted_output_path"))
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .map(path::expand_path_compat);
+        .map(path::expand_path_compat)
+        .unwrap_or_else(|| PathBuf::from(path::default_converted_output_path()));
 
     // 解析 [pipeline] 部分
     let pipeline_section = doc.get("pipeline").and_then(|v| v.as_table());

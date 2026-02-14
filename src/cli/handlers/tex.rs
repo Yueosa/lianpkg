@@ -17,7 +17,7 @@ pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
         .clone()
         .unwrap_or_else(|| ctx.config.unpacked_output_path.clone());
 
-    let output_path = args.output.clone().or_else(|| ctx.config.converted_output_path.clone());
+    let output_path = args.output.clone().unwrap_or_else(|| ctx.config.converted_output_path.clone());
 
     if !input_path.exists() {
         return Err(format!(
@@ -34,9 +34,7 @@ pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
     // 执行转换
     out::title("TEX Convert");
     out::path_info("Input", &input_path);
-    if let Some(ref out_path) = output_path {
-        out::path_info("Output", out_path);
-    }
+    out::path_info("Output", &output_path);
     println!();
 
     if input_path.is_file()
@@ -45,12 +43,13 @@ pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
             .map(|e| e.to_string_lossy().to_lowercase() == "tex")
             .unwrap_or(false)
     {
-        // 单文件转换
-        let out_path = output_path.unwrap_or_else(|| {
-            let mut p = input_path.clone();
-            p.set_extension("png");
-            p
-        });
+        // 单文件转换：如果 output_path 是目录，则拼接文件名
+        let out_path = if output_path.extension().is_some() {
+            output_path.clone()
+        } else {
+            let stem = input_path.file_stem().unwrap_or_default();
+            output_path.join(stem).with_extension("png")
+        };
 
         let _ = path::ensure_dir_compat(out_path.parent().unwrap_or(&out_path));
 
@@ -83,16 +82,14 @@ pub fn run(args: &TexArgs, config_path: Option<PathBuf>) -> Result<(), String> {
         out::success("TEX conversion completed!");
     } else {
         // 目录批量转换
-        let _ = output_path
-            .as_ref()
-            .map(|p| path::ensure_dir_compat(p));
+        let _ = path::ensure_dir_compat(&output_path);
 
         out::debug_api_enter(
             "tex",
             "convert_all",
             &format!("input={}", input_path.display()),
         );
-        let result = tex::convert_all(&input_path, output_path.as_deref())
+        let result = tex::convert_all(&input_path, &output_path)
             .map_err(|e| e.to_string())?;
 
         out::debug_api_return(&format!(

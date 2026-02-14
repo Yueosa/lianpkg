@@ -37,12 +37,12 @@ pub fn filter_wallpapers(
 
 /// 复制元数据文件到 tex_converted 目录
 ///
-/// 将 project.json、preview 等文件从 Workshop 源目录复制到对应的 tex_converted 目录。
+/// 将 project.json、preview 等文件从 Workshop 源目录复制到对应的 converted_output_path 目录。
 pub fn copy_metadata_to_tex_converted(config: &RuntimeConfig) {
     let workshop_path = &config.workshop_path;
-    let unpacked_path = &config.unpacked_output_path;
+    let converted_path = &config.converted_output_path;
 
-    let entries = match fs::read_dir(unpacked_path) {
+    let entries = match fs::read_dir(converted_path) {
         Ok(e) => e,
         Err(_) => return,
     };
@@ -58,11 +58,6 @@ pub fn copy_metadata_to_tex_converted(config: &RuntimeConfig) {
             None => continue,
         };
 
-        let tex_dest_dir = wallpaper_dir.join("tex_converted");
-        if !tex_dest_dir.exists() {
-            continue;
-        }
-
         let source_dir = workshop_path.join(&wallpaper_id);
         if !source_dir.exists() {
             continue;
@@ -72,7 +67,7 @@ pub fn copy_metadata_to_tex_converted(config: &RuntimeConfig) {
         for filename in &["project.json", "scene.json"] {
             let src = source_dir.join(filename);
             if src.exists() {
-                let dest = tex_dest_dir.join(filename);
+                let dest = wallpaper_dir.join(filename);
                 let _ = fs::copy(&src, &dest);
             }
         }
@@ -84,7 +79,7 @@ pub fn copy_metadata_to_tex_converted(config: &RuntimeConfig) {
                 if let Some(preview) = meta.get("preview").and_then(|v| v.as_str()) {
                     let src = source_dir.join(preview);
                     if src.exists() {
-                        let dest = tex_dest_dir.join(preview);
+                        let dest = wallpaper_dir.join(preview);
                         let _ = fs::copy(&src, &dest);
                     }
                 }
@@ -93,9 +88,10 @@ pub fn copy_metadata_to_tex_converted(config: &RuntimeConfig) {
     }
 }
 
-/// 清理 unpacked 目录（保留 tex_converted）
+/// 清理 unpacked 目录
 ///
-/// 删除 Pkg_Unpacked/壁纸ID/unpacked/ 子目录，保留 tex_converted。
+/// 删除 unpacked_output_path 下的所有内容（壁纸子目录），
+/// converted_output_path 是独立目录，不受影响。
 pub fn clean_unpacked_dir(unpacked_path: &Path) {
     let entries = match fs::read_dir(unpacked_path) {
         Ok(e) => e,
@@ -103,14 +99,11 @@ pub fn clean_unpacked_dir(unpacked_path: &Path) {
     };
 
     for entry in entries.flatten() {
-        let wallpaper_dir = entry.path();
-        if !wallpaper_dir.is_dir() {
-            continue;
-        }
-
-        let unpacked_sub = wallpaper_dir.join("unpacked");
-        if unpacked_sub.exists() {
-            let _ = fs::remove_dir_all(&unpacked_sub);
+        let path = entry.path();
+        if path.is_dir() {
+            let _ = fs::remove_dir_all(&path);
+        } else {
+            let _ = fs::remove_file(&path);
         }
     }
 }
@@ -144,35 +137,28 @@ pub fn find_tex_files(dir: &Path) -> Vec<PathBuf> {
 /// 确定 TEX 输出路径
 ///
 /// 输出规则：
-/// - 有自定义输出路径：平坦放入 custom_output
-/// - 无自定义输出：放入 `Pkg_Unpacked/<wallpaper_id>/tex_converted/`——所有 TEX 扁平存放
+/// - 从 tex_path 中提取相对于 unpacked_path 的 wallpaper_id（第一级目录）
+/// - 输出到 converted_path/<wallpaper_id>/<file_stem>
 pub fn determine_tex_output_path(
     tex_path: &Path,
     unpacked_path: &Path,
-    custom_output: &Option<PathBuf>,
+    converted_path: &Path,
 ) -> PathBuf {
     let file_stem = tex_path.file_stem().unwrap_or_default();
 
-    match custom_output {
-        Some(output_base) => {
-            let _ = crate::core::path::ensure_dir_compat(output_base);
-            output_base.join(file_stem)
-        }
-        None => {
-            // 从 tex_path 中提取 wallpaper_id（unpacked_path 后的第一级目录）
-            let wallpaper_dir = if let Ok(relative) = tex_path.strip_prefix(unpacked_path) {
-                if let Some(first_component) = relative.components().next() {
-                    unpacked_path.join(first_component.as_os_str())
-                } else {
-                    tex_path.parent().unwrap_or(unpacked_path).to_path_buf()
-                }
-            } else {
-                tex_path.parent().unwrap_or(unpacked_path).to_path_buf()
-            };
+    // 从 tex_path 中提取 wallpaper_id（unpacked_path 后的第一级目录）
+    let wallpaper_id = if let Ok(relative) = tex_path.strip_prefix(unpacked_path) {
+        relative.components().next()
+            .map(|c| c.as_os_str().to_string_lossy().to_string())
+    } else {
+        None
+    };
 
-            let output_dir = wallpaper_dir.join("tex_converted");
-            let _ = crate::core::path::ensure_dir_compat(&output_dir);
-            output_dir.join(file_stem)
-        }
-    }
+    let output_dir = match wallpaper_id {
+        Some(id) => converted_path.join(&id),
+        None => converted_path.to_path_buf(),
+    };
+
+    let _ = crate::core::path::ensure_dir_compat(&output_dir);
+    output_dir.join(file_stem)
 }

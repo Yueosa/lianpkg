@@ -118,7 +118,7 @@ pub fn unpack_all(
     let mut stats = UnpackStats::default();
 
     for source in pkg_sources {
-        let output_dir = unpacked_output_path.join(&source.wallpaper_id).join("unpacked");
+        let output_dir = unpacked_output_path.join(&source.wallpaper_id);
 
         for pkg_path in &source.pkg_paths {
             stats.pkg_processed += 1;
@@ -196,7 +196,7 @@ pub fn unpack_single(pkg_path: &Path, output_base: &Path) -> CoreResult<UnpackRe
             .as_str(),
     );
 
-    let output_dir = output_base.join(&scene_name).join("unpacked");
+    let output_dir = output_base.join(&scene_name);
 
     match pkg::unpack_pkg(pkg::UnpackPkgInput {
         file_path: pkg_path.to_path_buf(),

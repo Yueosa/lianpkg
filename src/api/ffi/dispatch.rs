@@ -115,9 +115,18 @@ fn handle_tex_convert(params: serde_json::Value) -> FfiResponse {
     };
 
     let input = PathBuf::from(params.input);
-    let output = params.output.as_deref().map(PathBuf::from);
+    let output = match params.output {
+        Some(ref s) => PathBuf::from(s),
+        None => {
+            // 使用配置中的默认 converted_output_path
+            match context::init(None) {
+                Ok(ctx) => ctx.config.converted_output_path.clone(),
+                Err(e) => return FfiResponse::error(format!("No output specified and failed to load config: {}", e)),
+            }
+        }
+    };
 
-    match tex::convert_all(&input, output.as_deref()) {
+    match tex::convert_all(&input, &output) {
         Ok(result) => FfiResponse::success(&result),
         Err(e) => FfiResponse::error(e.to_string()),
     }

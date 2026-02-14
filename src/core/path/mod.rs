@@ -92,13 +92,25 @@ pub fn default_raw_output_path() -> String {
     .unwrap_or_else(|_| "~/.local/share/lianpkg/Wallpapers_Raw".to_string())
 }
 
-/// 兼容层：获取默认解包输出路径
-pub fn default_unpacked_output_path() -> String {
+/// 内部：获取 Pkg_Unpacked 基础路径
+fn pkg_base_path() -> String {
     resolve_path(ResolvePathInput {
         path_type: PathType::UnpackedOutput,
     })
     .map(|o| o.path_str)
     .unwrap_or_else(|_| "~/.local/share/lianpkg/Pkg_Unpacked".to_string())
+}
+
+/// 兼容层：获取默认解包输出路径（Pkg_Unpacked/unpacked）
+pub fn default_unpacked_output_path() -> String {
+    let p = std::path::PathBuf::from(pkg_base_path()).join("unpacked");
+    p.display().to_string()
+}
+
+/// 兼容层：获取默认 TEX 转换输出路径（Pkg_Unpacked/tex_converted）
+pub fn default_converted_output_path() -> String {
+    let p = std::path::PathBuf::from(pkg_base_path()).join("tex_converted");
+    p.display().to_string()
 }
 
 /// 兼容层：从 pkg 文件名提取场景名

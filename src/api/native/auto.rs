@@ -211,7 +211,7 @@ pub fn run_auto(ctx: &AppContext, opts: AutoOptions) -> CoreResult<AutoOutput> {
                 Some(config.raw_output_path.join(&result.wallpaper_id).display().to_string())
             }
             native_scan::CopyResultType::Pkg => {
-                Some(config.unpacked_output_path.join(&result.wallpaper_id).join("tex_converted").display().to_string())
+                Some(config.converted_output_path.join(&result.wallpaper_id).display().to_string())
             }
             native_scan::CopyResultType::Skipped => None,
         };
@@ -262,7 +262,7 @@ pub fn run_auto(ctx: &AppContext, opts: AutoOptions) -> CoreResult<AutoOutput> {
             report(AutoStage::Converting, 70, None, "Converting TEX files...");
             let result = native_tex::convert_all(
                 &config.unpacked_output_path,
-                config.converted_output_path.as_deref(),
+                &config.converted_output_path,
             )?;
             stats.texs_converted = result.stats.tex_success;
             Some(result)
@@ -362,7 +362,7 @@ pub fn run_pkg_only(
 /// 仅执行 TEX 转换
 pub fn run_tex_only(
     unpacked_path: &std::path::Path,
-    output_path: Option<&std::path::Path>,
+    output_path: &std::path::Path,
 ) -> CoreResult<native_tex::ConvertOutput> {
     native_tex::convert_all(unpacked_path, output_path)
 }

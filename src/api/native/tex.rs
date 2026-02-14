@@ -5,8 +5,10 @@
 
 use crate::core::{error::CoreResult, tex};
 use super::util;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 // ============================================================================
 // 类型定义
@@ -84,12 +86,12 @@ pub struct TexPreview {
 // 接口
 // ============================================================================
 
-/// 批量转换 TEX 文件
+/// 批量转换 TEX 文件（多线程）
 ///
-/// 扫描 unpacked_path 下所有 .tex 文件并转换。
+/// 扫描 unpacked_path 下所有 .tex 文件并使用 rayon 并行转换。
 pub fn convert_all(
     unpacked_path: &Path,
-    output_path: Option<&Path>,
+    output_path: &Path,
 ) -> CoreResult<ConvertOutput> {
     let tex_files = util::find_tex_files(unpacked_path);
 
@@ -100,67 +102,78 @@ pub fn convert_all(
         });
     }
 
-    let mut results = Vec::new();
-    let mut stats = ConvertStats::default();
-    let output_opt = output_path.map(|p| p.to_path_buf());
+    let stats = Mutex::new(ConvertStats::default());
 
-    for tex_path in tex_files {
-        stats.tex_processed += 1;
+    let results: Vec<ConvertResult> = tex_files
+        .par_iter()
+        .map(|tex_path| {
+            let out_path = util::determine_tex_output_path(
+                tex_path,
+                unpacked_path,
+                output_path,
+            );
 
-        let out_path = util::determine_tex_output_path(
-            &tex_path,
-            unpacked_path,
-            &output_opt,
-        );
+            match tex::convert_tex(tex::ConvertTexInput {
+                file_path: tex_path.clone(),
+                output_path: out_path.clone(),
+            }) {
+                Ok(result) => {
+                    let info = &result.tex_info;
 
-        match tex::convert_tex(tex::ConvertTexInput {
-            file_path: tex_path.clone(),
-            output_path: out_path.clone(),
-        }) {
-            Ok(result) => {
-                stats.tex_success += 1;
-                let info = &result.tex_info;
-                if info.is_video {
-                    stats.video_count += 1;
-                } else {
-                    stats.image_count += 1;
+                    {
+                        let mut s = stats.lock().unwrap();
+                        s.tex_processed += 1;
+                        s.tex_success += 1;
+                        if info.is_video {
+                            s.video_count += 1;
+                        } else {
+                            s.image_count += 1;
+                        }
+                    }
+
+                    let tex_info = TexPreview {
+                        version: info.version.clone(),
+                        format: info.format.clone(),
+                        width: info.width,
+                        height: info.height,
+                        image_count: info.image_count,
+                        mipmap_count: info.mipmap_count,
+                        is_compressed: info.is_compressed,
+                        is_video: info.is_video,
+                        data_size: info.data_size,
+                        recommended_output: if info.is_video { "mp4" } else { "png" }.to_string(),
+                    };
+
+                    ConvertResult {
+                        input_path: tex_path.clone(),
+                        output_path: result.converted_file.output_path,
+                        success: true,
+                        format: Some(result.converted_file.format),
+                        tex_info: Some(tex_info),
+                        error: None,
+                    }
                 }
+                Err(e) => {
+                    {
+                        let mut s = stats.lock().unwrap();
+                        s.tex_processed += 1;
+                        s.tex_failed += 1;
+                    }
 
-                let tex_info = TexPreview {
-                    version: info.version.clone(),
-                    format: info.format.clone(),
-                    width: info.width,
-                    height: info.height,
-                    image_count: info.image_count,
-                    mipmap_count: info.mipmap_count,
-                    is_compressed: info.is_compressed,
-                    is_video: info.is_video,
-                    data_size: info.data_size,
-                    recommended_output: if info.is_video { "mp4" } else { "png" }.to_string(),
-                };
+                    ConvertResult {
+                        input_path: tex_path.clone(),
+                        output_path: out_path,
+                        success: false,
+                        format: None,
+                        tex_info: None,
+                        error: Some(e.to_string()),
+                    }
+                }
+            }
+        })
+        .collect();
 
-                results.push(ConvertResult {
-                    input_path: tex_path,
-                    output_path: result.converted_file.output_path,
-                    success: true,
-                    format: Some(result.converted_file.format),
-                    tex_info: Some(tex_info),
-                    error: None,
-                });
-            }
-            Err(e) => {
-                stats.tex_failed += 1;
-                results.push(ConvertResult {
-                    input_path: tex_path,
-                    output_path: out_path,
-                    success: false,
-                    format: None,
-                    tex_info: None,
-                    error: Some(e.to_string()),
-                });
-            }
-        }
-    }
+    let stats = stats.into_inner().unwrap();
 
     Ok(ConvertOutput { results, stats })
 }

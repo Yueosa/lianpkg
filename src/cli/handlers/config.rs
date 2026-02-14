@@ -43,11 +43,7 @@ fn show_config(ctx: &context::AppContext) -> Result<(), String> {
     out::subtitle("TEX");
     out::stat(
         "Converted Output Path",
-        config
-            .converted_output_path
-            .as_ref()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|| "(auto)".to_string()),
+        config.converted_output_path.display(),
     );
 
     println!();
@@ -83,9 +79,8 @@ fn get_config(ctx: &context::AppContext, key: &str) -> Result<(), String> {
         "unpack.clean_unpacked" => config.clean_unpacked.to_string(),
         "tex.converted_output_path" => config
             .converted_output_path
-            .as_ref()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|| "(not set)".to_string()),
+            .display()
+            .to_string(),
         "pipeline.incremental" => config.pipeline.incremental.to_string(),
         "pipeline.auto_unpack_pkg" => config.pipeline.auto_unpack_pkg.to_string(),
         "pipeline.auto_convert_tex" => config.pipeline.auto_convert_tex.to_string(),

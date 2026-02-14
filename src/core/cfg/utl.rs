@@ -20,7 +20,7 @@ pub fn default_config_template() -> String {
     let enable_raw = true;
     let unpack_out = escape_path_for_toml(&path::default_unpacked_output_path());
     let clean_unpacked = true;
-    let converted_hint = String::new();
+    let converted_out = escape_path_for_toml(&path::default_converted_output_path());
 
     format!(
         r#"# === LianPkg Configuration File / LianPkg 配置文件 ===
@@ -57,24 +57,23 @@ enable_raw_output = {enable_raw}
 
 [unpack]
 # === PKG 解包的基础路径 ===
-#     PKG 解包产物会放在: <此路径>/<壁纸ID>/unpacked/
-#     TEX 转换产物会放在: <此路径>/<壁纸ID>/tex_converted/
+#     PKG 解包产物放在: <此路径>/<壁纸ID>/
 #         - Windows 默认: .\\Pkg_Unpacked
 #         - Linux 默认: ~/.local/share/lianpkg/Pkg_Unpacked
 unpacked_output_path = "{unpack_out}"
 
-# === 是否在结束时清理 unpacked 子目录 ===
-#     启用后，流水线完成后会自动删除每个壁纸目录下的 unpacked/ 子目录
-#     仅保留 tex_converted/ 目录（最终产物）
-#     Default/默认: false
+# === 是否在结束时清理解包中间文件 ===
+#     启用后，流水线完成后会自动删除 unpacked_output_path 下的所有内容
+#     Default/默认: true
 clean_unpacked = {clean_unpacked}
 
 
 [tex]
 # === TEX 转换后的图片/视频输出路径 ===
-#     若不配置，默认输出到: <unpacked_output_path>/<壁纸ID>/tex_converted/
-#     若配置了自定义路径，所有转换结果会扁平存放在指定目录中
-# converted_output_path = "{converted_hint}"
+#     转换产物放在: <此路径>/<壁纸ID>/
+#         - Windows 默认: .\\Pkg_Unpacked\\tex_converted
+#         - Linux 默认: ~/.local/share/lianpkg/Pkg_Unpacked/tex_converted
+converted_output_path = "{converted_out}"
 
 
 [pipeline]
