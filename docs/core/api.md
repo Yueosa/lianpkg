@@ -117,7 +117,7 @@ fn get_wallpaper_detail(workshop_path: &Path, id: &str) -> Option<WallpaperInfo>
 | `AutoOutput` | 流水线结果（copy/pkg/tex 各阶段结果 + 统计） |
 | `AutoProgress` | 进度回调数据 |
 | `AutoStage` | Init → Scanning → Copying → Unpacking → Converting → Cleanup → Done |
-| `PipelineStats` | 统计（processed, skipped, unpacked, converted, elapsed） |
+| `PipelineStats` | 统计（wallpapers_processed, wallpapers_skipped, pkgs_unpacked, texs_converted, elapsed_ms） |
 | `DiskEstimateOutput` | 磁盘空间预估 |
 
 ### 接口
@@ -131,7 +131,7 @@ fn estimate_disk_usage(config: &RuntimeConfig) -> DiskEstimateOutput
 
 // 专项执行
 fn run_pkg_only(sources: &[PkgSource], output: &Path) -> CoreResult<UnpackOutput>
-fn run_tex_only(unpacked: &Path, output: Option<&Path>) -> CoreResult<ConvertOutput>
+fn run_tex_only(unpacked_path: &Path, output_path: &Path) -> CoreResult<ConvertOutput>
 ```
 
 ### 用法
@@ -191,13 +191,13 @@ fn unpack_all(sources: &[PkgSource], output: &Path) -> CoreResult<UnpackOutput>
 |------|------|
 | `ConvertOutput` | 批量转换结果 |
 | `ConvertResult` | 单个 TEX 转换结果 |
-| `ConvertStats` | 统计（processed, success, failed, images, videos） |
+| `ConvertStats` | 统计（tex_processed, tex_success, tex_failed, tex_skipped, image_count, video_count） |
 | `TexPreview` | TEX 文件预览信息 |
 
 ### 接口
 
 ```rust
-fn convert_all(unpacked: &Path, output: Option<&Path>) -> CoreResult<ConvertOutput>
+fn convert_all(unpacked_path: &Path, output_path: &Path) -> CoreResult<ConvertOutput>
 fn convert_single(tex_path: &Path, output: &Path) -> CoreResult<ConvertResult>
 fn preview_tex(tex_path: &Path) -> CoreResult<TexPreview>
 ```
