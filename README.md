@@ -4,18 +4,31 @@
 
 # LianPkg ✨
 
-LianPkg 是一个用于处理 Wallpaper Engine 壁纸资源的综合工具。它可以提取壁纸文件、解包 `.pkg` 文件以及将 `.tex` 纹理转换为常见的图像/视频格式，支持 Linux 与 Windows。
+Wallpaper Engine 壁纸资源处理工具 — CLI + GUI
+
+提取壁纸文件、解包 `.pkg`、转换 `.tex` 纹理为常见图像/视频格式，支持 Linux 与 Windows。
 
 </div>
 
 ### 特性
 
-- **全自动流水线** — 一条命令完成 扫描 → 解包 → 转换
+- **图形界面** — Flutter GUI，可视化操作全部功能
+- **全自动流水线** — 一条命令 / 一键按钮完成 扫描 → 解包 → 转换
 - **多线程 TEX 转换** — 基于 rayon 并行处理，充分利用多核 CPU
 - **增量处理** — 自动跳过已处理的壁纸，只处理新增内容
 - **多格式支持** — 支持 TEX v1-v4、图片纹理（PNG）、视频纹理（MP4）
 - **自动探测** — 自动扫描所有 Steam Library 定位壁纸目录（支持多磁盘）
 - **跨平台** — Linux / Windows 双平台支持
+
+---
+
+## 截图预览 📷
+
+| 总览仪表盘 | 壁纸浏览 |
+|:---:|:---:|
+| ![home](./image/home.png) | ![library](./image/library.png) |
+| **自动流水线** | **设置** |
+| ![pipeline](./image/pipeline.png) | ![settings](./image/settings.png) |
 
 ---
 
@@ -40,14 +53,47 @@ LianPkg 的工作对象是 Steam Workshop 中的 Wallpaper Engine 壁纸资源�
 
 ### 下载预编译版本
 
-在 [Releases](https://github.com/Yueosa/lianpkg/releases) 页面下载对应平台的二进制文件。
+在 [Releases](https://github.com/Yueosa/lianpkg/releases) 页面下载对应平台的文件：
+
+| 产物 | Linux | Windows |
+|---|---|---|
+| CLI 命令行 | `lianpkg_*_linux_x86_64` (1.3M) | `lianpkg_*_windows_x86_64.exe` (1.5M) |
+| GUI 图形界面 | `lianpkg-gui_*_linux_x86_64.tar.gz` (~19M) | 待发布 |
+| FFI 共享库 | `liblianpkg_*_linux_x86_64.so` (1.2M) | `lianpkg_*_windows_x86_64.dll` (4.6M) |
+
+> GUI 通过 FFI 调用 Rust 核心，共享库已编译进 GUI 中，无需单独下载 .so/.dll
+
+#### Linux GUI 安装说明
+
+`tar.gz` 压缩包解压后是一个完整的程序目录，结构如下：
+
+```
+lianpkg-gui/                  ← 解压后的根目录
+├── lianpkg-gui               ← 可执行文件（启动入口）
+├── lib/
+│   ├── libflutter_linux_gtk.so  ← Flutter 引擎
+│   └── libapp.so               ← 应用通辑与 Rust FFI
+└── data/
+    ├── icudtl.dat              ← 国际化数据
+    └── flutter_assets/         ← 字体、着色器、图标等资源
+```
+
+```bash
+# 解压并运行
+mkdir -p ~/Apps/lianpkg-gui
+tar -xzf lianpkg-gui_*_linux_x86_64.tar.gz -C ~/Apps/lianpkg-gui
+~/Apps/lianpkg-gui/lianpkg-gui
+```
+
+> ❗ 不要单独移动 `lianpkg-gui` 可执行文件，它必须与 `lib/` 和 `data/` 目录保持相对位置才能运行
 
 ### Arch Linux (AUR)
 
 ```bash
+# CLI
 yay -S lianpkg-bin
-# 或
-paru -S lianpkg-bin
+# GUI
+yay -S lianpkg-gui-bin
 ```
 
 ### 从源码编译
@@ -55,8 +101,14 @@ paru -S lianpkg-bin
 ```bash
 git clone https://github.com/Yueosa/lianpkg.git
 cd lianpkg
+
+# CLI
 cargo build --release
 # 二进制文件位于 target/release/lianpkg
+
+# GUI（需要 Flutter SDK）
+cd gui && flutter build linux --release
+# 产物位于 gui/build/linux/x64/release/bundle/
 ```
 
 ---
@@ -83,6 +135,19 @@ cargo build --release
 ---
 
 ## 快速开始 🚀
+
+### GUI 图形界面
+
+启动 `lianpkg-gui` 后即可使用，提供：
+
+- **总览仪表盘** — 壁纸统计、磁盘占用、最近记录
+- **壁纸浏览** — 缩略图网格 + 搜索筛选 + 单壁纸操作
+- **自动流水线** — 可视化流程图 + 开关配置 + 实时进度
+- **配置管理** — 路径、开关、流水线选项全部可视化设置
+
+GUI 通过 FFI 调用同一个 Rust 核心，与 CLI 共享全部处理能力。
+
+### CLI 命令行
 
 ```bash
 # 一键处理所有壁纸（推荐，默认增量处理）
@@ -369,11 +434,13 @@ lianpkg status --clear -y
 
 ---
 
-## 磁盘空间预估 💾
+## 磁盘空间 💾
 
-执行 `auto` 模式时，程序会自动：
+GUI 总览页实时显示各输出目录的实际占用大小（Raw 输出 / 解包产物 / 转换产物）。
 
-1. **预估磁盘占用** — 根据 PKG 文件大小估算峰值空间需求
+CLI `auto` 模式会在执行前自动：
+
+1. **预估磁盘占用** — 根据待处理 PKG 文件大小估算峰值空间需求
 2. **检查剩余空间** — 空间不足时警告并等待确认
 3. **错误保护** — 发生错误时自动清理临时文件
 
