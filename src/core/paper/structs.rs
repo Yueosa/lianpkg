@@ -17,8 +17,6 @@ pub struct PaperConfig {
     pub search_path: PathBuf,
     /// 原始壁纸输出路径
     pub raw_output: PathBuf,
-    /// pkg 临时输出路径
-    pub pkg_temp_output: PathBuf,
     /// 是否提取原始壁纸
     pub enable_raw: bool,
 }
@@ -64,8 +62,6 @@ pub struct ProcessFolderInput {
     pub folder: PathBuf,
     /// 原始壁纸输出路径
     pub raw_output: PathBuf,
-    /// pkg 临时输出路径
-    pub pkg_temp_output: PathBuf,
     /// 是否提取原始壁纸
     pub enable_raw: bool,
 }
