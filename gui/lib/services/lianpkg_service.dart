@@ -77,11 +77,11 @@ class LianpkgService {
   /// 解包 PKG 文件
   Future<UnpackOutput> unpackPkg({
     required List<PkgSourceDto> sources,
-    required String output,
+    String? output,
   }) async {
     final result = await _ffi.callAsync('pkg_unpack', {
       'sources': sources.map((s) => s.toJson()).toList(),
-      'output': output,
+      'output': ?output,
     });
     _checkError(result);
     return UnpackOutput.fromJson(result['data'] as Map<String, dynamic>);

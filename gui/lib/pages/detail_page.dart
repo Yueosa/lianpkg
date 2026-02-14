@@ -214,11 +214,12 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     });
     try {
       final service = ref.read(lianpkgServiceProvider);
+      final config = await ref.read(configProvider.future);
       final output = await service.unpackPkg(
         sources: [
           PkgSourceDto(wallpaperId: wallpaper.id, pkgPaths: wallpaper.pkgFiles),
         ],
-        output: '${wallpaper.folderPath}/unpacked_output',
+        output: config.unpackedOutputPath,
       );
       if (mounted) {
         setState(() {
@@ -245,9 +246,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     });
     try {
       final service = ref.read(lianpkgServiceProvider);
-      final output = await service.convertTex(
-        input: '${wallpaper.folderPath}/unpacked_output',
-      );
+      final config = await ref.read(configProvider.future);
+      final output = await service.convertTex(input: config.unpackedOutputPath);
       if (mounted) {
         setState(() {
           _convertResult =
