@@ -369,14 +369,38 @@ class _ResultPanel extends StatelessWidget {
               spacing: 24,
               runSpacing: 8,
               children: [
-                _ResultStat('壁纸', output.wallpapersProcessed),
-                _ResultStat('PKG 解包', output.pkgUnpacked),
-                _ResultStat('TEX 转换', output.texConverted),
-                _ResultStat('图片', output.imagesProduced),
-                _ResultStat('视频', output.videosProduced),
-                _ResultStat('跳过', output.skipped),
-                if (output.errors > 0)
-                  _ResultStat('错误', output.errors, isError: true),
+                _ResultStat('壁纸', output.stats.wallpapersProcessed),
+                _ResultStat('跳过', output.stats.wallpapersSkipped),
+                _ResultStat('PKG 解包', output.stats.pkgsUnpacked),
+                _ResultStat('TEX 转换', output.stats.texsConverted),
+                if (output.copyOutput != null) ...[
+                  _ResultStat('Raw 复制', output.copyOutput!.copiedCount),
+                  if (output.copyOutput!.errorCount > 0)
+                    _ResultStat(
+                      'Raw 错误',
+                      output.copyOutput!.errorCount,
+                      isError: true,
+                    ),
+                ],
+                if (output.pkgOutput != null) ...[
+                  _ResultStat('解包数', output.pkgOutput!.unpackedCount),
+                  if (output.pkgOutput!.errorCount > 0)
+                    _ResultStat(
+                      '解包错误',
+                      output.pkgOutput!.errorCount,
+                      isError: true,
+                    ),
+                ],
+                if (output.texOutput != null) ...[
+                  _ResultStat('图片', output.texOutput!.imageCount),
+                  _ResultStat('视频', output.texOutput!.videoCount),
+                  if (output.texOutput!.errorCount > 0)
+                    _ResultStat(
+                      'TEX 错误',
+                      output.texOutput!.errorCount,
+                      isError: true,
+                    ),
+                ],
               ],
             ),
           ],

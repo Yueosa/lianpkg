@@ -7,13 +7,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/wallpaper.dart';
+import '../pages/detail_page.dart';
 import '../providers/providers.dart';
 
 /// 搜索关键词
 final _searchQueryProvider = StateProvider<String>((ref) => '');
 
 /// 类型筛选
-final _filterTypeProvider = StateProvider<WallpaperType?>((ref) => null);
+final _filterTypeProvider = StateProvider<WallpaperCategory?>((ref) => null);
 
 /// 过滤后的壁纸列表
 final _filteredWallpapersProvider = Provider<AsyncValue<List<WallpaperInfo>>>((
@@ -27,7 +28,7 @@ final _filteredWallpapersProvider = Provider<AsyncValue<List<WallpaperInfo>>>((
     var list = scan.wallpapers;
 
     if (filterType != null) {
-      list = list.where((w) => w.wallpaperType == filterType).toList();
+      list = list.where((w) => w.category == filterType).toList();
     }
 
     if (query.isNotEmpty) {
@@ -68,7 +69,7 @@ class BrowserPage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              ...WallpaperType.values.map(
+              ...WallpaperCategory.values.map(
                 (type) => Padding(
                   padding: const EdgeInsets.only(left: 4),
                   child: FilterChip(
@@ -139,7 +140,9 @@ class _WallpaperCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          // TODO: Phase C — 跳转到 Detail 页
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => DetailPage(wallpaper: wallpaper)),
+          );
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -163,9 +166,9 @@ class _WallpaperCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      _TypeBadge(type: wallpaper.wallpaperType),
+                      _TypeBadge(category: wallpaper.category),
                       const SizedBox(width: 4),
-                      if (wallpaper.processed)
+                      if (wallpaper.isProcessed)
                         Icon(
                           Icons.check_circle,
                           size: 14,
@@ -208,15 +211,14 @@ class _WallpaperCard extends StatelessWidget {
 }
 
 class _TypeBadge extends StatelessWidget {
-  final WallpaperType type;
-  const _TypeBadge({required this.type});
+  final WallpaperCategory category;
+  const _TypeBadge({required this.category});
 
   @override
   Widget build(BuildContext context) {
-    final (color, bg) = switch (type) {
-      WallpaperType.pkg => (Colors.blue.shade700, Colors.blue.shade50),
-      WallpaperType.raw => (Colors.green.shade700, Colors.green.shade50),
-      WallpaperType.skipped => (Colors.grey.shade600, Colors.grey.shade100),
+    final (color, bg) = switch (category) {
+      WallpaperCategory.pkg => (Colors.blue.shade700, Colors.blue.shade50),
+      WallpaperCategory.raw => (Colors.green.shade700, Colors.green.shade50),
     };
 
     return Container(
@@ -226,7 +228,7 @@ class _TypeBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
-        type.label,
+        category.label,
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.bold,
