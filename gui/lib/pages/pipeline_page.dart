@@ -66,17 +66,19 @@ class _PipelineUiState {
 class _PipelineNotifier extends StateNotifier<_PipelineUiState> {
   final Ref ref;
   Timer? _pollTimer;
+  bool _configSynced = false;
 
   _PipelineNotifier(this.ref) : super(const _PipelineUiState());
 
-  /// 从持久化配置同步开关值（仅 idle 时调用）
+  /// 从持久化配置同步开关值（仅首次 idle 时调用一次）
   void syncFromConfig(
     bool enableRaw,
     bool enableTex,
     bool cleanUnpacked,
     bool incremental,
   ) {
-    if (state.runState != _RunState.idle) return;
+    if (_configSynced || state.runState != _RunState.idle) return;
+    _configSynced = true;
     state = state.copyWith(
       noRaw: !enableRaw,
       noTex: !enableTex,
@@ -147,6 +149,7 @@ class _PipelineNotifier extends StateNotifier<_PipelineUiState> {
 
   void reset() {
     _pollTimer?.cancel();
+    _configSynced = false;
     state = const _PipelineUiState();
   }
 
@@ -384,7 +387,7 @@ class _FlowDiagram extends StatelessWidget {
         icon: Icons.check_circle_outlined,
         label: '完成',
         enabled: true,
-        active: isDone,
+        done: isDone,
       ),
     ];
 
@@ -430,6 +433,7 @@ class _StepData {
   final String label;
   final bool enabled;
   final bool active;
+  final bool done;
   final String? badge;
 
   const _StepData({
@@ -437,6 +441,7 @@ class _StepData {
     required this.label,
     required this.enabled,
     this.active = false,
+    this.done = false,
     this.badge,
   });
 }
@@ -448,12 +453,16 @@ class _StepBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = step.active
+    final color = step.done
+        ? Colors.green
+        : step.active
         ? theme.colorScheme.primary
         : step.enabled
         ? theme.colorScheme.onSurface
         : theme.colorScheme.outline.withAlpha(100);
-    final bgColor = step.active
+    final bgColor = step.done
+        ? Colors.green.withAlpha(30)
+        : step.active
         ? theme.colorScheme.primaryContainer
         : step.enabled
         ? theme.colorScheme.surfaceContainerHighest
@@ -469,8 +478,11 @@ class _StepBox extends StatelessWidget {
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(12),
-            border: step.active
-                ? Border.all(color: theme.colorScheme.primary, width: 2)
+            border: step.active || step.done
+                ? Border.all(
+                    color: step.done ? Colors.green : theme.colorScheme.primary,
+                    width: 2,
+                  )
                 : null,
           ),
           child: Column(
@@ -485,6 +497,8 @@ class _StepBox extends StatelessWidget {
                     color: theme.colorScheme.primary,
                   ),
                 )
+              else if (step.done)
+                const Icon(Icons.check_circle, size: 28, color: Colors.green)
               else
                 Icon(step.icon, size: 28, color: color),
               const SizedBox(height: 6),
