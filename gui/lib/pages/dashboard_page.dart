@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/state.dart';
 import '../providers/providers.dart';
+import '../utils/open_folder.dart';
 
 class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
@@ -14,6 +15,7 @@ class DashboardPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final statusAsync = ref.watch(statusProvider);
     final stateAsync = ref.watch(stateProvider);
+    final configAsync = ref.watch(configProvider);
     final theme = Theme.of(context);
 
     return Padding(
@@ -115,6 +117,9 @@ class DashboardPage extends ConsumerWidget {
                 diskUsage: status.diskUsage,
                 processedPkg: status.processedPkg,
                 processedRaw: status.processedRaw,
+                rawPath: configAsync.valueOrNull?.rawOutputPath,
+                unpackedPath: configAsync.valueOrNull?.unpackedOutputPath,
+                convertedPath: configAsync.valueOrNull?.convertedOutputPath,
               ),
               const SizedBox(height: 24),
 
@@ -235,10 +240,16 @@ class _DiskUsageCard extends StatelessWidget {
   final DiskUsage diskUsage;
   final int processedPkg;
   final int processedRaw;
+  final String? rawPath;
+  final String? unpackedPath;
+  final String? convertedPath;
   const _DiskUsageCard({
     required this.diskUsage,
     required this.processedPkg,
     required this.processedRaw,
+    this.rawPath,
+    this.unpackedPath,
+    this.convertedPath,
   });
 
   @override
@@ -274,12 +285,18 @@ class _DiskUsageCard extends StatelessWidget {
                   'Raw 输出',
                   f(diskUsage.rawOutputSize),
                   subtitle: '$processedRaw 个壁纸',
+                  folderPath: rawPath,
                 ),
-                _DiskStat('解包产物', f(diskUsage.unpackedOutputSize)),
+                _DiskStat(
+                  '解包产物',
+                  f(diskUsage.unpackedOutputSize),
+                  folderPath: unpackedPath,
+                ),
                 _DiskStat(
                   '转换产物',
                   f(diskUsage.convertedOutputSize),
                   subtitle: '$processedPkg 个壁纸',
+                  folderPath: convertedPath,
                 ),
                 if (diskUsage.availableSpace != null)
                   _DiskStat('可用空间', f(diskUsage.availableSpace!)),
@@ -296,28 +313,49 @@ class _DiskStat extends StatelessWidget {
   final String label;
   final String value;
   final String? subtitle;
-  const _DiskStat(this.label, this.value, {this.subtitle});
+  final String? folderPath;
+  const _DiskStat(this.label, this.value, {this.subtitle, this.folderPath});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          value,
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        Text(label, style: Theme.of(context).textTheme.labelSmall),
-        if (subtitle != null)
-          Text(
-            subtitle!,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: folderPath != null ? () => openFolder(folderPath!) : null,
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (folderPath != null) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.open_in_new,
+                    size: 14,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
+              ],
             ),
-          ),
-      ],
+            Text(label, style: Theme.of(context).textTheme.labelSmall),
+            if (subtitle != null)
+              Text(
+                subtitle!,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
