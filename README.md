@@ -58,7 +58,7 @@ LianPkg 的工作对象是 Steam Workshop 中的 Wallpaper Engine 壁纸资源�
 | 产物 | Linux | Windows |
 |---|---|---|
 | CLI 命令行 | `lianpkg_*_linux_x86_64` (1.3M) | `lianpkg_*_windows_x86_64.exe` (1.5M) |
-| GUI 图形界面 | `lianpkg-gui_*_linux_x86_64.tar.gz` (~19M) | 待发布 |
+| GUI 图形界面 | `lianpkg-gui_*_linux_x86_64.tar.gz` (~19M) | `lianpkg-gui_*_windows_x86_64.zip` (~12M) |
 | FFI 共享库 | `liblianpkg_*_linux_x86_64.so` (1.2M) | `lianpkg_*_windows_x86_64.dll` (4.6M) |
 
 > GUI 通过 FFI 动态加载 Rust 共享库，共享库已打包在 GUI 发行包内（`lib/` 目录），无需单独下载
