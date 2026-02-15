@@ -61,7 +61,7 @@ LianPkg 的工作对象是 Steam Workshop 中的 Wallpaper Engine 壁纸资源�
 | GUI 图形界面 | `lianpkg-gui_*_linux_x86_64.tar.gz` (~19M) | 待发布 |
 | FFI 共享库 | `liblianpkg_*_linux_x86_64.so` (1.2M) | `lianpkg_*_windows_x86_64.dll` (4.6M) |
 
-> GUI 通过 FFI 调用 Rust 核心，共享库已编译进 GUI 中，无需单独下载 .so/.dll
+> GUI 通过 FFI 动态加载 Rust 共享库，共享库已打包在 GUI 发行包内（`lib/` 目录），无需单独下载
 
 #### Linux GUI 安装说明
 
@@ -72,7 +72,8 @@ lianpkg-gui/                  ← 解压后的根目录
 ├── lianpkg-gui               ← 可执行文件（启动入口）
 ├── lib/
 │   ├── libflutter_linux_gtk.so  ← Flutter 引擎
-│   └── libapp.so               ← 应用通辑与 Rust FFI
+│   ├── libapp.so               ← 应用逻辑
+│   └── liblianpkg.so           ← Rust FFI 共享库
 └── data/
     ├── icudtl.dat              ← 国际化数据
     └── flutter_assets/         ← 字体、着色器、图标等资源
