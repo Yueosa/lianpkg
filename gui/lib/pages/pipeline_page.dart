@@ -23,21 +23,11 @@ class _PipelineUiState {
   final AutoOutput? output;
   final String? errorMessage;
 
-  // 选项
-  final bool noRaw;
-  final bool noTex;
-  final bool noCleanUnpacked;
-  final bool noIncremental;
-
   const _PipelineUiState({
     this.runState = _RunState.idle,
     this.progress = const ProgressSnapshot(),
     this.output,
     this.errorMessage,
-    this.noRaw = false,
-    this.noTex = false,
-    this.noCleanUnpacked = false,
-    this.noIncremental = false,
   });
 
   _PipelineUiState copyWith({
@@ -45,20 +35,12 @@ class _PipelineUiState {
     ProgressSnapshot? progress,
     AutoOutput? output,
     String? errorMessage,
-    bool? noRaw,
-    bool? noTex,
-    bool? noCleanUnpacked,
-    bool? noIncremental,
   }) {
     return _PipelineUiState(
       runState: runState ?? this.runState,
       progress: progress ?? this.progress,
       output: output ?? this.output,
       errorMessage: errorMessage ?? this.errorMessage,
-      noRaw: noRaw ?? this.noRaw,
-      noTex: noTex ?? this.noTex,
-      noCleanUnpacked: noCleanUnpacked ?? this.noCleanUnpacked,
-      noIncremental: noIncremental ?? this.noIncremental,
     );
   }
 }
@@ -66,35 +48,14 @@ class _PipelineUiState {
 class _PipelineNotifier extends StateNotifier<_PipelineUiState> {
   final Ref ref;
   Timer? _pollTimer;
-  bool _configSynced = false;
 
   _PipelineNotifier(this.ref) : super(const _PipelineUiState());
 
-  /// 从持久化配置同步开关值（仅首次 idle 时调用一次）
-  void syncFromConfig(
-    bool enableRaw,
-    bool enableTex,
-    bool cleanUnpacked,
-    bool incremental,
-  ) {
-    if (_configSynced || state.runState != _RunState.idle) return;
-    _configSynced = true;
-    state = state.copyWith(
-      noRaw: !enableRaw,
-      noTex: !enableTex,
-      noCleanUnpacked: !cleanUnpacked,
-      noIncremental: !incremental,
-    );
-  }
-
-  void toggleNoRaw(bool v) => state = state.copyWith(noRaw: v);
-  void toggleNoTex(bool v) => state = state.copyWith(noTex: v);
-  void toggleNoCleanUnpacked(bool v) =>
-      state = state.copyWith(noCleanUnpacked: v);
-  void toggleNoIncremental(bool v) => state = state.copyWith(noIncremental: v);
-
   Future<void> start() async {
     if (state.runState == _RunState.running) return;
+
+    // 从全局配置读取选项
+    final config = await ref.read(configProvider.future);
 
     state = state.copyWith(
       runState: _RunState.running,
@@ -111,10 +72,10 @@ class _PipelineNotifier extends StateNotifier<_PipelineUiState> {
     try {
       final service = ref.read(lianpkgServiceProvider);
       final output = await service.runAuto(
-        noRaw: state.noRaw,
-        noTex: state.noTex,
-        noCleanUnpacked: state.noCleanUnpacked,
-        noIncremental: state.noIncremental,
+        noRaw: !config.enableRawOutput,
+        noTex: !config.pipeline.autoConvertTex,
+        noCleanUnpacked: !config.cleanUnpacked,
+        noIncremental: !config.pipeline.incremental,
       );
 
       _pollTimer?.cancel();
@@ -149,7 +110,6 @@ class _PipelineNotifier extends StateNotifier<_PipelineUiState> {
 
   void reset() {
     _pollTimer?.cancel();
-    _configSynced = false;
     state = const _PipelineUiState();
   }
 
@@ -167,22 +127,8 @@ class PipelinePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final uiState = ref.watch(_pipelineStateProvider);
     final notifier = ref.read(_pipelineStateProvider.notifier);
-    final configAsync = ref.watch(configProvider);
+    final config = ref.watch(configProvider).valueOrNull;
     final theme = Theme.of(context);
-
-    // 配置加载后同步到 notifier（仅 idle 时）
-    configAsync.whenData((config) {
-      if (uiState.runState == _RunState.idle) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          notifier.syncFromConfig(
-            config.enableRawOutput,
-            config.pipeline.autoConvertTex,
-            config.cleanUnpacked,
-            config.pipeline.incremental,
-          );
-        });
-      }
-    });
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -202,10 +148,10 @@ class PipelinePage extends ConsumerWidget {
 
             // ── 流程图 ──
             _FlowDiagram(
-              enableRaw: !uiState.noRaw,
-              enableTex: !uiState.noTex,
-              enableClean: !uiState.noCleanUnpacked,
-              incremental: !uiState.noIncremental,
+              enableRaw: config?.enableRawOutput ?? true,
+              enableTex: config?.pipeline.autoConvertTex ?? true,
+              enableClean: config?.cleanUnpacked ?? true,
+              incremental: config?.pipeline.incremental ?? true,
               runState: uiState.runState,
               stage: uiState.progress.stage,
             ),
@@ -218,33 +164,53 @@ class PipelinePage extends ConsumerWidget {
               icon: Icons.file_copy_outlined,
               title: '复制 Raw',
               subtitle: '将非PKG壁纸的原始文件复制到 Raw 输出目录',
-              value: !uiState.noRaw,
+              value: config?.enableRawOutput ?? true,
               enabled: uiState.runState != _RunState.running,
-              onChanged: (v) => notifier.toggleNoRaw(!v),
+              onChanged: (v) async {
+                await ref
+                    .read(lianpkgServiceProvider)
+                    .setConfig('wallpaper.enable_raw_output', v.toString());
+                ref.invalidate(configProvider);
+              },
             ),
             _OptionTile(
               icon: Icons.image_outlined,
               title: '转换 TEX',
               subtitle: '将 TEX 纹理文件转换为标准图片/视频格式',
-              value: !uiState.noTex,
+              value: config?.pipeline.autoConvertTex ?? true,
               enabled: uiState.runState != _RunState.running,
-              onChanged: (v) => notifier.toggleNoTex(!v),
+              onChanged: (v) async {
+                await ref
+                    .read(lianpkgServiceProvider)
+                    .setConfig('pipeline.auto_convert_tex', v.toString());
+                ref.invalidate(configProvider);
+              },
             ),
             _OptionTile(
               icon: Icons.cleaning_services_outlined,
               title: '清理解包产物',
               subtitle: '转换完成后自动删除中间解包文件以节省空间',
-              value: !uiState.noCleanUnpacked,
+              value: config?.cleanUnpacked ?? true,
               enabled: uiState.runState != _RunState.running,
-              onChanged: (v) => notifier.toggleNoCleanUnpacked(!v),
+              onChanged: (v) async {
+                await ref
+                    .read(lianpkgServiceProvider)
+                    .setConfig('unpack.clean_unpacked', v.toString());
+                ref.invalidate(configProvider);
+              },
             ),
             _OptionTile(
               icon: Icons.fast_forward_outlined,
               title: '增量模式',
               subtitle: '跳过已处理过的壁纸，仅处理新增内容',
-              value: !uiState.noIncremental,
+              value: config?.pipeline.incremental ?? true,
               enabled: uiState.runState != _RunState.running,
-              onChanged: (v) => notifier.toggleNoIncremental(!v),
+              onChanged: (v) async {
+                await ref
+                    .read(lianpkgServiceProvider)
+                    .setConfig('pipeline.incremental', v.toString());
+                ref.invalidate(configProvider);
+              },
             ),
             const SizedBox(height: 20),
 
