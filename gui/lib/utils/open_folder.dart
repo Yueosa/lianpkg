@@ -17,9 +17,8 @@ Future<bool> openFolder(String path) async {
     if (Platform.isLinux) {
       await Process.run('xdg-open', [path]);
     } else if (Platform.isWindows) {
-      // Windows explorer 需要反斜杠路径，否则含空格等字符时会丢失路径
       final winPath = path.replaceAll('/', '\\');
-      await Process.run('explorer', [winPath]);
+      await Process.run('cmd', ['/c', 'start', '', winPath]);
     } else {
       return false;
     }
