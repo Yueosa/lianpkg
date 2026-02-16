@@ -5,16 +5,21 @@ import 'dart:io';
 
 /// 在系统文件资源管理器中打开指定目录
 ///
+/// 目录不存在时自动递归创建。
 /// Linux: xdg-open, Windows: explorer
 Future<bool> openFolder(String path) async {
-  final dir = Directory(path);
-  if (!dir.existsSync()) return false;
-
   try {
+    final dir = Directory(path);
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+
     if (Platform.isLinux) {
       await Process.run('xdg-open', [path]);
     } else if (Platform.isWindows) {
-      await Process.run('explorer', [path]);
+      // Windows explorer 需要反斜杠路径，否则含空格等字符时会丢失路径
+      final winPath = path.replaceAll('/', '\\');
+      await Process.run('explorer', [winPath]);
     } else {
       return false;
     }
