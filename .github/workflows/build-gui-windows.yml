@@ -36,8 +36,14 @@ jobs:
         run: |
           copy target\release\lianpkg.dll gui\build\windows\x64\runner\Release\lianpkg.dll
 
+      # ── 打包为 zip（直接用 PowerShell，避免 upload-artifact 套娃） ──
+      - name: Package
+        run: |
+          Compress-Archive -Path gui\build\windows\x64\runner\Release\* -DestinationPath lianpkg-gui_${{ inputs.version }}_windows_x86_64.zip
+        shell: pwsh
+
       # ── 上传产物 ──
       - uses: actions/upload-artifact@v4
         with:
           name: lianpkg-gui_${{ inputs.version }}_windows_x86_64
-          path: gui/build/windows/x64/runner/Release/
+          path: lianpkg-gui_${{ inputs.version }}_windows_x86_64.zip
